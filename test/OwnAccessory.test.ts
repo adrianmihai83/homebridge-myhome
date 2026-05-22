@@ -300,7 +300,7 @@ describe('OwnBlindAccessory', () => {
         handler.destroy();
     });
 
-    it('updateStatus init phase keeps cached position and only sends status query', () => {
+    it('updateStatus init phase keeps cached position without sending commands', () => {
         const spy = platform.sendCommandSpy;
         spy.calls.length = 0;
         handler.position = 42;
@@ -311,8 +311,7 @@ describe('OwnBlindAccessory', () => {
         assert.equal(handler.initStartPosition, true);
         assert.equal(handler.position, 42);
         assert.equal(handler.target, 42);
-        const cmds = spy.calls.map((c: unknown[]) => (c[0] as { command: string }).command);
-        assert.deepEqual(cmds, ['*#2*23##']);
+        assert.deepEqual(spy.calls, []);
     });
 
     it('evaluatePosition during init does not send stop when DECREASING at target', () => {
@@ -406,36 +405,15 @@ describe('OwnBlindAccessory', () => {
         assert.equal(handler.positionTimeout, undefined, 'must not reschedule at lower end-stop');
     });
 
-    it('status query response does not trigger physical override on monitor path', () => {
-        // Bug: inStatusQuery was only set inside packet callback (command path).
-        // Monitor receives echoed status packets WITHOUT the flag → false physical override.
-        // Fix: inStatusQuery is now set BEFORE sendCommand and cleared in done callback.
-        handler.homeKitMovement = true;
-        handler.expectedState = POSITION_STATE.INCREASING;
-        handler.state = POSITION_STATE.INCREASING;  // forced by endTimerCommand timeout
-        handler.initStartPosition = true;  // skip init path
+    it('updateStatus after init does not send status query', () => {
+        const spy = platform.sendCommandSpy;
+        spy.calls.length = 0;
+        handler.initStartPosition = true;
 
-        handler.updateStatus();  // sets inStatusQuery=true, then calls sendCommand
+        handler.updateStatus();
 
-        // Flag must be true while the query is in flight (monitor path protection)
-        assert.equal((handler as unknown as Record<string, unknown>)['inStatusQuery'], true,
-            'inStatusQuery must be true from the moment updateStatus sends the query');
-
-        // Simulate monitor receiving STOPPED echo (the bug scenario)
-        handler.onData('*2*0*23##');
-
-        // homeKitMovement must survive — no physical override during query window
-        assert.equal(handler.homeKitMovement, true,
-            'homeKitMovement must survive status query STOP echo on monitor path');
-
-        // Simulate done callback (command connection closes)
-        const lastCall = platform.sendCommandSpy.calls[platform.sendCommandSpy.calls.length - 1];
-        const params = lastCall[0] as Record<string, unknown>;
-        if (typeof params['done'] === 'function') {
-            (params['done'] as (p: null, i: number) => void)(null, -1);
-        }
-        assert.equal((handler as unknown as Record<string, unknown>)['inStatusQuery'], false,
-            'inStatusQuery must be cleared after done callback');
+        assert.deepEqual(spy.calls, []);
+        assert.equal((handler as unknown as Record<string, unknown>)['inStatusQuery'], false);
     });
 
     it('endTimerCommand confirmation sets grace window to absorb gateway echo STOP packets', () => {
