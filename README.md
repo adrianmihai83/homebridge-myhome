@@ -77,7 +77,7 @@ Add a platform block to your Homebridge `config.json`:
 |-----|------|----------|-------------|
 | `id` | integer | yes | OWN `WHERE` address |
 | `name` | string | no | Display name in HomeKit |
-| `dimmer` | boolean | no | Enable brightness control (levels 2–10). When a light is triggered by a gateway scenario or automation rule, the gateway sends an extended packet (`*1*1000#X*WHERE##`) that is handled transparently. |
+| `dimmer` | boolean | no | Enable brightness control (levels 1–10, with 0 as off). When a light is triggered by a gateway scenario or automation rule, the gateway sends an extended packet (`*1*1000#X*WHERE##`) that is handled transparently. |
 | `where` | string | no | Raw OpenWebNet `WHERE` address for special/group relays, e.g. `68#4#01`. Defaults to `id`. |
 | `frame_on` | string | no | Full custom frame sent when HomeKit turns the light on. |
 | `frame_off` | string | no | Full custom frame sent when HomeKit turns the light off. |

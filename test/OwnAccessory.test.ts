@@ -1,5 +1,6 @@
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
+import { setTimeout as delay } from 'node:timers/promises';
 import { makeMockPlatform, makeMockAccessory, POSITION_STATE, HEATING_COOLING_CURRENT, HEATING_COOLING_TARGET, CONTACT_STATE } from './helpers';
 import type { OwnPlatformLike } from '../lib/OwnAccessory';
 import type { PlatformAccessory } from 'homebridge';
@@ -82,7 +83,7 @@ describe('OwnLightAccessory', () => {
         const h = new OwnLightAccessory(p as unknown as P, a as unknown as A, { id: 42, name: 'dim', dimmer: true });
         h.onData('*1*5*42##');
         assert.equal(h.value, true);
-        assert.equal(h.brightness, Math.round((5 - 2) / 8 * 100));
+        assert.equal(h.brightness, 50);
     });
 
     it('onData dimmer off', () => {
@@ -92,6 +93,57 @@ describe('OwnLightAccessory', () => {
         const h = new OwnLightAccessory(p as unknown as P, a as unknown as A, { id: 42, name: 'dim', dimmer: true });
         h.onData('*1*0*42##');
         assert.equal(h.value, false);
+    });
+
+    it('dimmer brightness maps to OpenWebNet levels 1-10', () => {
+        const p = makeMockPlatform();
+        const a = makeMockAccessory();
+        a.addService('AccessoryInformation');
+        const h = new OwnLightAccessory(p as unknown as P, a as unknown as A, { id: 42, name: 'dim', dimmer: true });
+        const brightnessSetter = a.services['Lightbulb'].characteristics['Brightness'].setter!;
+
+        brightnessSetter(1);
+        brightnessSetter(10);
+        brightnessSetter(11);
+        brightnessSetter(100);
+
+        const cmds = p.sendCommandSpy.calls.map((c: unknown[]) => (c[0] as { command: string }).command);
+        assert.deepEqual(cmds, ['*1*1*42##', '*1*1*42##', '*1*2*42##', '*1*10*42##']);
+        h.destroy();
+    });
+
+    it('dimmer On followed by Brightness sends only the requested level', async () => {
+        const p = makeMockPlatform();
+        const a = makeMockAccessory();
+        a.addService('AccessoryInformation');
+        const h = new OwnLightAccessory(p as unknown as P, a as unknown as A, { id: 42, name: 'dim', dimmer: true });
+        const onSetter = a.services['Lightbulb'].characteristics['On'].setter!;
+        const brightnessSetter = a.services['Lightbulb'].characteristics['Brightness'].setter!;
+
+        onSetter(true);
+        brightnessSetter(40);
+        await delay(250);
+
+        const cmds = p.sendCommandSpy.calls.map((c: unknown[]) => (c[0] as { command: string }).command);
+        assert.deepEqual(cmds, ['*1*4*42##']);
+        h.destroy();
+    });
+
+    it('dimmer On without Brightness sends cached brightness after a short delay', async () => {
+        const p = makeMockPlatform();
+        const a = makeMockAccessory();
+        a.addService('AccessoryInformation');
+        const h = new OwnLightAccessory(p as unknown as P, a as unknown as A, { id: 42, name: 'dim', dimmer: true });
+        const onSetter = a.services['Lightbulb'].characteristics['On'].setter!;
+        h.brightness = 30;
+
+        onSetter(true);
+        assert.deepEqual(p.sendCommandSpy.calls, []);
+        await delay(250);
+
+        const cmds = p.sendCommandSpy.calls.map((c: unknown[]) => (c[0] as { command: string }).command);
+        assert.deepEqual(cmds, ['*1*3*42##']);
+        h.destroy();
     });
 
     it('uses custom frame_on and frame_off for non-dimmer light power commands', () => {

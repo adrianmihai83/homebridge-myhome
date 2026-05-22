@@ -92,6 +92,7 @@ export class OwnLightAccessory extends OwnAccessory {
     frameOn?: string;
     frameOff?: string;
     disableStatusQuery: boolean;
+    private dimmerOnTimeout: ReturnType<typeof setTimeout> | undefined;
     private lightbulbService: InstanceType<typeof Service>;
 
     constructor(platform: OwnPlatformLike, accessory: PlatformAccessory, config: LightConfig) {
@@ -105,6 +106,7 @@ export class OwnLightAccessory extends OwnAccessory {
         this.frameOn = config.frame_on?.trim();
         this.frameOff = config.frame_off?.trim();
         this.disableStatusQuery = config.disableStatusQuery ?? false;
+        this.dimmerOnTimeout = undefined;
 
         this.accessory.getService(this.Service.AccessoryInformation)!
             .setCharacteristic(this.Characteristic.Model, 'Light');
@@ -118,9 +120,9 @@ export class OwnLightAccessory extends OwnAccessory {
                 this.log.info(`[${this.id}] Setting power state to ${value ? 'on' : 'off'}`);
                 this.value = value as boolean;
                 if (value && this.dimmer) {
-                    const level = Math.min(10, Math.max(2, Math.round(this.brightness / 100 * 8) + 2));
-                    this.controller.sendCommand({ command: this.commandForLevel(level), log: this.log });
+                    this.scheduleDimmerOn();
                 } else {
+                    this.cancelDimmerOn();
                     this.controller.sendCommand({ command: this.commandForPower(value as boolean), log: this.log });
                 }
             });
@@ -130,13 +132,16 @@ export class OwnLightAccessory extends OwnAccessory {
                 .onGet(() => this.brightness)
                 .onSet((value: CharacteristicValue) => {
                     this.log.info(`[${this.id}] Setting brightness to ${value}`);
+                    this.cancelDimmerOn();
                     this.brightness = value as number;
                     if (value === 0) {
                         this.value = false;
                         this.lightbulbService.getCharacteristic(this.Characteristic.On).updateValue(false);
                         this.controller.sendCommand({ command: this.commandForPower(false), log: this.log });
                     } else {
-                        const level = Math.min(10, Math.max(2, Math.round((value as number) / 100 * 8) + 2));
+                        this.value = true;
+                        this.lightbulbService.getCharacteristic(this.Characteristic.On).updateValue(true);
+                        const level = this.brightnessToLevel(value as number);
                         this.controller.sendCommand({ command: this.commandForLevel(level), log: this.log });
                     }
                 });
@@ -165,6 +170,23 @@ export class OwnLightAccessory extends OwnAccessory {
         return `*1*${on ? '1' : '0'}*${this.where}##`;
     }
 
+    private scheduleDimmerOn(): void {
+        this.cancelDimmerOn();
+        this.dimmerOnTimeout = setTimeout(() => {
+            this.dimmerOnTimeout = undefined;
+            this.controller.sendCommand({ command: this.commandForLevel(this.brightnessToLevel(this.brightness)), log: this.log });
+        }, 200);
+    }
+
+    private cancelDimmerOn(): void {
+        clearTimeout(this.dimmerOnTimeout);
+        this.dimmerOnTimeout = undefined;
+    }
+
+    private brightnessToLevel(brightness: number): number {
+        return Math.min(10, Math.max(1, Math.ceil(brightness / 10)));
+    }
+
     private commandForLevel(level: number): string {
         return `*1*${level}*${this.where}##`;
     }
@@ -182,8 +204,8 @@ export class OwnLightAccessory extends OwnAccessory {
             } else {
                 this.log.info(`[${this.id}] power on (level ${level})`);
                 this.value = true;
-                if (this.dimmer && level >= 2) {
-                    this.brightness = Math.max(1, Math.round((level - 2) / 8 * 100));
+                if (this.dimmer && level >= 1) {
+                    this.brightness = Math.min(100, Math.max(1, level * 10));
                     this.lightbulbService.getCharacteristic(this.Characteristic.Brightness).updateValue(this.brightness);
                 }
             }
@@ -195,6 +217,10 @@ export class OwnLightAccessory extends OwnAccessory {
 
     checkWhere(where: string): boolean {
         return where === this.where || super.checkWhere(where);
+    }
+
+    destroy(): void {
+        this.cancelDimmerOn();
     }
 }
 

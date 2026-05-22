@@ -63,7 +63,7 @@
                         },
                         "dimmer": {
                             "title": "Dimmer",
-                            "description": "Enable dimmer support (brightness levels 2-10)",
+                            "description": "Enable dimmer support (brightness levels 1-10, with 0 as off)",
                             "type": "boolean",
                             "required": false,
                             "default": false
