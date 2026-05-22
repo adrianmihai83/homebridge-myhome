@@ -175,6 +175,17 @@ describe('OwnBlindAccessory', () => {
         );
     });
 
+    it('restores cached position from accessory context', () => {
+        const p = makeMockPlatform();
+        const a = makeMockAccessory();
+        a.context.blindPosition = 63;
+        a.addService('AccessoryInformation');
+        const h = new OwnBlindAccessory(p as unknown as P, a as unknown as A, { id: 5, name: 'cached', time: 20 });
+        assert.equal(h.position, 63);
+        assert.equal(h.target, 63);
+        h.destroy();
+    });
+
     it('onData stop', () => {
         handler.position = 50;
         handler.target = 50;
@@ -289,15 +300,19 @@ describe('OwnBlindAccessory', () => {
         handler.destroy();
     });
 
-    it('updateStatus init phase sets _initPhase and sends move-down', () => {
+    it('updateStatus init phase keeps cached position and only sends status query', () => {
         const spy = platform.sendCommandSpy;
         spy.calls.length = 0;
+        handler.position = 42;
+        handler.target = 42;
         assert.equal(handler.initStartPosition, false);
         handler.updateStatus();
-        assert.equal(handler.initPhase, true);
+        assert.equal(handler.initPhase, false);
         assert.equal(handler.initStartPosition, true);
+        assert.equal(handler.position, 42);
+        assert.equal(handler.target, 42);
         const cmds = spy.calls.map((c: unknown[]) => (c[0] as { command: string }).command);
-        assert.ok(cmds.some((c: string) => c === '*2*1*23##'));
+        assert.deepEqual(cmds, ['*#2*23##']);
     });
 
     it('evaluatePosition during init does not send stop when DECREASING at target', () => {

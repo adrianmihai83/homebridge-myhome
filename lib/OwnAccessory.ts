@@ -200,10 +200,10 @@ export class OwnBlindAccessory extends OwnAccessory {
 
         this.state = this.Characteristic.PositionState.STOPPED;
         this.expectedState = this.Characteristic.PositionState.STOPPED;
-        this.position = 0;
+        this.position = this.readCachedPosition();
         this.initStartPosition = false;
         this.commandSent = false;
-        this.target = 0;
+        this.target = this.position;
         this.moveTrackingTimeout = undefined;
         this.packetTimeout = undefined;
         this.positionTimeout = undefined;
@@ -245,26 +245,32 @@ export class OwnBlindAccessory extends OwnAccessory {
     updateStatus(): void {
         this.log.info(`[${this.id}] Blind updateStatus`);
         if (!this.initStartPosition) {
-            this.log.info(`[${this.id}] Initialization phase of blind: reset position to 0 and send move down`);
-            this.controller.sendCommand({ command: `*2*1*${this.id}##`, log: this.log });
-            this.position = 0;
-            this.target = 0;
-            this.initPhase = true;
+            this.log.info(`[${this.id}] Initialization phase of blind: keep cached position ${this.position} and fetch state`);
             this.initStartPosition = true;
-        } else {
-            this.log.info(`[${this.id}] Blind fetching State :${this.state}`);
-            this.inStatusQuery = true;
-            this.controller.sendCommand({
-                command: `*#2*${this.id}##`,
-                log: this.log,
-                packet: (pkt: string) => {
-                    this.onData(pkt);
-                },
-                done: (_pkt: string | null, _idx: number) => {
-                    this.inStatusQuery = false;
-                },
-            });
         }
+        this.log.info(`[${this.id}] Blind fetching State :${this.state}`);
+        this.inStatusQuery = true;
+        this.controller.sendCommand({
+            command: `*#2*${this.id}##`,
+            log: this.log,
+            packet: (pkt: string) => {
+                this.onData(pkt);
+            },
+            done: (_pkt: string | null, _idx: number) => {
+                this.inStatusQuery = false;
+            },
+        });
+    }
+
+    private readCachedPosition(): number {
+        const position = this.accessory.context.blindPosition;
+        return typeof position === 'number' && Number.isFinite(position)
+            ? Math.min(100, Math.max(0, Math.round(position)))
+            : 0;
+    }
+
+    private cachePosition(): void {
+        this.accessory.context.blindPosition = this.position;
     }
 
     startTimerCommand(): void {
@@ -348,6 +354,7 @@ export class OwnBlindAccessory extends OwnAccessory {
                 }
                 if (Math.abs(this.position - this.target) <= 3) {
                     this.position = this.target;
+                    this.cachePosition();
                 }
             } else if (direction === '1') {
                 this.state = this.Characteristic.PositionState.DECREASING;
@@ -410,6 +417,7 @@ export class OwnBlindAccessory extends OwnAccessory {
             }
         }
         this.windowCoveringService.getCharacteristic(this.Characteristic.CurrentPosition).updateValue(this.position);
+        this.cachePosition();
     }
 
     msPerPercent(position: number): number {
