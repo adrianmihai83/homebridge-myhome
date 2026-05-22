@@ -94,6 +94,47 @@ describe('OwnLightAccessory', () => {
         assert.equal(h.value, false);
     });
 
+    it('uses custom frame_on and frame_off for non-dimmer light power commands', () => {
+        const p = makeMockPlatform();
+        const a = makeMockAccessory();
+        a.addService('AccessoryInformation');
+        const h = new OwnLightAccessory(p as unknown as P, a as unknown as A, {
+            id: 68,
+            name: 'special',
+            dimmer: false,
+            where: '68#4#01',
+            frame_on: '*1*1*68#4#01##',
+            frame_off: '*1*0*68#4#01## ',
+        });
+        const onSetter = a.services['Lightbulb'].characteristics['On'].setter!;
+
+        onSetter(true);
+        onSetter(false);
+
+        const cmds = p.sendCommandSpy.calls.map((c: unknown[]) => (c[0] as { command: string }).command);
+        assert.deepEqual(cmds, ['*1*1*68#4#01##', '*1*0*68#4#01##']);
+        h.destroy();
+    });
+
+    it('uses custom where for generated light commands', () => {
+        const p = makeMockPlatform();
+        const a = makeMockAccessory();
+        a.addService('AccessoryInformation');
+        const h = new OwnLightAccessory(p as unknown as P, a as unknown as A, {
+            id: 68,
+            name: 'special',
+            dimmer: false,
+            where: '68#4#01',
+        });
+        const onSetter = a.services['Lightbulb'].characteristics['On'].setter!;
+
+        onSetter(true);
+
+        const cmd = (p.sendCommandSpy.calls[0][0] as { command: string }).command;
+        assert.equal(cmd, '*1*1*68#4#01##');
+        h.destroy();
+    });
+
     it('onData extended off packet (1000#0) turns light off', () => {
         handler.value = true;
         handler.onData('*1*1000#0*42##');
@@ -118,10 +159,50 @@ describe('OwnLightAccessory', () => {
         assert.ok(!handler.checkWhere('99'));
     });
 
+    it('checkWhere matches custom where', () => {
+        const p = makeMockPlatform();
+        const a = makeMockAccessory();
+        a.addService('AccessoryInformation');
+        const h = new OwnLightAccessory(p as unknown as P, a as unknown as A, { id: 68, name: 'special', where: '68#4#01' });
+        assert.ok(h.checkWhere('68#4#01'));
+        assert.ok(h.checkWhere('68'));
+        assert.ok(!h.checkWhere('99'));
+        h.destroy();
+    });
+
     it('updateStatus sends status command', () => {
         handler.updateStatus();
         assert.ok(platform.sendCommandSpy.calls.length > 0);
         assert.ok((platform.sendCommandSpy.calls[0][0] as { command: string }).command.includes('*#1*42'));
+    });
+
+    it('updateStatus uses custom where', () => {
+        const p = makeMockPlatform();
+        const a = makeMockAccessory();
+        a.addService('AccessoryInformation');
+        const h = new OwnLightAccessory(p as unknown as P, a as unknown as A, { id: 68, name: 'special', where: '68#4#01' });
+
+        h.updateStatus();
+
+        const cmd = (p.sendCommandSpy.calls[0][0] as { command: string }).command;
+        assert.equal(cmd, '*#1*68#4#01##');
+        h.destroy();
+    });
+
+    it('updateStatus skips command when status query is disabled', () => {
+        const p = makeMockPlatform();
+        const a = makeMockAccessory();
+        a.addService('AccessoryInformation');
+        const h = new OwnLightAccessory(p as unknown as P, a as unknown as A, {
+            id: 68,
+            name: 'special',
+            disableStatusQuery: true,
+        });
+
+        h.updateStatus();
+
+        assert.deepEqual(p.sendCommandSpy.calls, []);
+        h.destroy();
     });
 });
 

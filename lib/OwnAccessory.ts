@@ -17,6 +17,10 @@ export interface BaseConfig {
 
 export interface LightConfig extends BaseConfig {
     dimmer?: boolean;
+    where?: string;
+    frame_on?: string;
+    frame_off?: string;
+    disableStatusQuery?: boolean;
 }
 
 export interface BlindConfig extends BaseConfig {
@@ -84,6 +88,10 @@ export class OwnLightAccessory extends OwnAccessory {
     value: boolean;
     dimmer: boolean;
     brightness: number;
+    where: string;
+    frameOn?: string;
+    frameOff?: string;
+    disableStatusQuery: boolean;
     private lightbulbService: InstanceType<typeof Service>;
 
     constructor(platform: OwnPlatformLike, accessory: PlatformAccessory, config: LightConfig) {
@@ -93,6 +101,10 @@ export class OwnLightAccessory extends OwnAccessory {
         this.value = false;
         this.dimmer = config.dimmer ?? false;
         this.brightness = 100;
+        this.where = config.where ?? String(this.id);
+        this.frameOn = config.frame_on?.trim();
+        this.frameOff = config.frame_off?.trim();
+        this.disableStatusQuery = config.disableStatusQuery ?? false;
 
         this.accessory.getService(this.Service.AccessoryInformation)!
             .setCharacteristic(this.Characteristic.Model, 'Light');
@@ -107,9 +119,9 @@ export class OwnLightAccessory extends OwnAccessory {
                 this.value = value as boolean;
                 if (value && this.dimmer) {
                     const level = Math.min(10, Math.max(2, Math.round(this.brightness / 100 * 8) + 2));
-                    this.controller.sendCommand({ command: `*1*${level}*${this.id}##`, log: this.log });
+                    this.controller.sendCommand({ command: this.commandForLevel(level), log: this.log });
                 } else {
-                    this.controller.sendCommand({ command: `*1*${value ? '1' : '0'}*${this.id}##`, log: this.log });
+                    this.controller.sendCommand({ command: this.commandForPower(value as boolean), log: this.log });
                 }
             });
 
@@ -122,10 +134,10 @@ export class OwnLightAccessory extends OwnAccessory {
                     if (value === 0) {
                         this.value = false;
                         this.lightbulbService.getCharacteristic(this.Characteristic.On).updateValue(false);
-                        this.controller.sendCommand({ command: `*1*0*${this.id}##`, log: this.log });
+                        this.controller.sendCommand({ command: this.commandForPower(false), log: this.log });
                     } else {
                         const level = Math.min(10, Math.max(2, Math.round((value as number) / 100 * 8) + 2));
-                        this.controller.sendCommand({ command: `*1*${level}*${this.id}##`, log: this.log });
+                        this.controller.sendCommand({ command: this.commandForLevel(level), log: this.log });
                     }
                 });
         }
@@ -133,20 +145,34 @@ export class OwnLightAccessory extends OwnAccessory {
 
     updateStatus(): void {
         this.log.info(`[${this.id}] Light updateStatus`);
+        if (this.disableStatusQuery) {
+            this.log.info(`[${this.id}] Light status query disabled`);
+            return;
+        }
         this.controller.sendCommand({
-            command: `*#1*${this.id}##`,
+            command: `*#1*${this.where}##`,
             log: this.log,
             packet: (pkt: string) => {
-                const m = pkt.match(/^\*#1\*\d+\*1\*(\d+)##$/);
-                if (m) this.onData(`*1*${m[1]}*${this.id}##`);
+                const m = pkt.match(/^\*#1\*[\d#]+\*1\*(\d+)##$/);
+                if (m) this.onData(`*1*${m[1]}*${this.where}##`);
             },
         });
     }
 
+    private commandForPower(on: boolean): string {
+        if (on && this.frameOn) return this.frameOn;
+        if (!on && this.frameOff) return this.frameOff;
+        return `*1*${on ? '1' : '0'}*${this.where}##`;
+    }
+
+    private commandForLevel(level: number): string {
+        return `*1*${level}*${this.where}##`;
+    }
+
     onData(packet: string): void {
         // Extended scenario/automation format *1*1000#<level>*<id>## — treat sub-level as the effective level
-        const ext = packet.match(/^\*1\*1000#(\d+)\*\d+##$/);
-        const extract = ext ?? packet.match(/^\*1\*(\d+)\*\d+##$/);
+        const ext = packet.match(/^\*1\*1000#(\d+)\*[\d#]+##$/);
+        const extract = ext ?? packet.match(/^\*1\*(\d+)\*[\d#]+##$/);
         if (extract) {
             this.log.debug('id:%s onLight(%s)', this.id, packet);
             const level = parseInt(extract[1], 10);
@@ -165,6 +191,10 @@ export class OwnLightAccessory extends OwnAccessory {
         } else {
             this.log.error('[%s] Light unknown packet:%s', this.id, packet);
         }
+    }
+
+    checkWhere(where: string): boolean {
+        return where === this.where || super.checkWhere(where);
     }
 }
 

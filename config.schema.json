@@ -67,6 +67,31 @@
                             "type": "boolean",
                             "required": false,
                             "default": false
+                        },
+                        "where": {
+                            "title": "OpenWebNet WHERE",
+                            "description": "Optional raw OpenWebNet WHERE address, e.g. 68#4#01 for group/special relays. Defaults to id.",
+                            "type": "string",
+                            "required": false
+                        },
+                        "frame_on": {
+                            "title": "Custom ON frame",
+                            "description": "Optional full OpenWebNet frame to send when HomeKit turns this light on.",
+                            "type": "string",
+                            "required": false
+                        },
+                        "frame_off": {
+                            "title": "Custom OFF frame",
+                            "description": "Optional full OpenWebNet frame to send when HomeKit turns this light off.",
+                            "type": "string",
+                            "required": false
+                        },
+                        "disableStatusQuery": {
+                            "title": "Disable status query",
+                            "description": "Do not query the gateway for this light status; useful for special relays that do not answer status reads.",
+                            "type": "boolean",
+                            "required": false,
+                            "default": false
                         }
                     }
                 }
