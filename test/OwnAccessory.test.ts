@@ -191,12 +191,12 @@ describe('OwnBlindAccessory', () => {
     });
 
     it('onData increasing', () => {
-        handler.onData('*2*1*23##');
+        handler.onData('*2*2*23##');
         assert.equal(handler.state, POSITION_STATE.INCREASING);
     });
 
     it('onData decreasing', () => {
-        handler.onData('*2*2*23##');
+        handler.onData('*2*1*23##');
         assert.equal(handler.state, POSITION_STATE.DECREASING);
     });
 
@@ -207,9 +207,9 @@ describe('OwnBlindAccessory', () => {
         assert.ok(debugs.length > 0);
     });
 
-    it('onData extended 1000#2 treated as DECREASING', () => {
+    it('onData extended 1000#2 treated as INCREASING', () => {
         handler.onData('*2*1000#2*23##');
-        assert.equal(handler.state, POSITION_STATE.DECREASING);
+        assert.equal(handler.state, POSITION_STATE.INCREASING);
     });
 
     it('onData extended 1000#0 treated as STOPPED', () => {
@@ -297,7 +297,7 @@ describe('OwnBlindAccessory', () => {
         assert.equal(handler.initPhase, true);
         assert.equal(handler.initStartPosition, true);
         const cmds = spy.calls.map((c: unknown[]) => (c[0] as { command: string }).command);
-        assert.ok(cmds.some((c: string) => c === '*2*2*23##'));
+        assert.ok(cmds.some((c: string) => c === '*2*1*23##'));
     });
 
     it('evaluatePosition during init does not send stop when DECREASING at target', () => {
@@ -341,7 +341,7 @@ describe('OwnBlindAccessory', () => {
         let evalCalled = 0;
         const orig = handler.evaluatePosition.bind(handler);
         handler.evaluatePosition = () => { evalCalled++; orig(); };
-        handler.onData('*2*2*23##');
+        handler.onData('*2*1*23##');
         assert.equal(evalCalled, 0, 'evaluatePosition must not be called for duplicate DECREASING');
         handler.destroy();
     });
@@ -424,7 +424,7 @@ describe('OwnBlindAccessory', () => {
     });
 
     it('endTimerCommand confirmation sets grace window to absorb gateway echo STOP packets', () => {
-        // Bug: after UP confirmed (*2*1000#1*id##), the old-format *2*0*id## arrives late.
+        // Bug: after UP confirmed (*2*1000#2*id##), the old-format *2*0*id## arrives late.
         // With commandSent=false but homeKitMovement=true, this STOP triggers false physical override.
         // Fix: endTimerCommand success path sets inStatusQuery=true for 300ms grace window.
         handler.homeKitMovement = true;
@@ -453,7 +453,7 @@ describe('OwnBlindAccessory', () => {
         handler.position = 50;
         handler.target = 80;
 
-        handler.onData('*2*2*23##');  // physical DOWN while HomeKit was going UP
+        handler.onData('*2*1*23##');  // physical DOWN while HomeKit was going UP
 
         assert.equal(handler.homeKitMovement, false, 'homeKitMovement must be cleared on real physical override');
         assert.equal(handler.state, POSITION_STATE.DECREASING);
@@ -487,7 +487,7 @@ describe('OwnBlindAccessory', () => {
         handler.target = 80;
         handler.move();
         const cmds = spy.calls.map((c: unknown[]) => (c[0] as { command: string }).command);
-        assert.ok(cmds.some((c: string) => c === '*2*1*23##'));
+        assert.ok(cmds.some((c: string) => c === '*2*2*23##'));
         handler.destroy();
     });
 
@@ -499,7 +499,7 @@ describe('OwnBlindAccessory', () => {
         handler.target = 20;
         handler.move();
         const cmds = spy.calls.map((c: unknown[]) => (c[0] as { command: string }).command);
-        assert.ok(cmds.some((c: string) => c === '*2*2*23##'));
+        assert.ok(cmds.some((c: string) => c === '*2*1*23##'));
         handler.destroy();
     });
 });

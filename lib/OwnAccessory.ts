@@ -246,7 +246,7 @@ export class OwnBlindAccessory extends OwnAccessory {
         this.log.info(`[${this.id}] Blind updateStatus`);
         if (!this.initStartPosition) {
             this.log.info(`[${this.id}] Initialization phase of blind: reset position to 0 and send move down`);
-            this.controller.sendCommand({ command: `*2*2*${this.id}##`, log: this.log });
+            this.controller.sendCommand({ command: `*2*1*${this.id}##`, log: this.log });
             this.position = 0;
             this.target = 0;
             this.initPhase = true;
@@ -315,7 +315,7 @@ export class OwnBlindAccessory extends OwnAccessory {
         this.expectedState = this.Characteristic.PositionState.INCREASING;
         this.startTimerCommand();
         this.controller.sendCommand({
-            command: `*2*1*${this.id}##`,
+            command: `*2*2*${this.id}##`,
             log: this.log,
             started: () => this.startConfirmationTimer(),
         });
@@ -327,7 +327,7 @@ export class OwnBlindAccessory extends OwnAccessory {
         this.expectedState = this.Characteristic.PositionState.DECREASING;
         this.startTimerCommand();
         this.controller.sendCommand({
-            command: `*2*2*${this.id}##`,
+            command: `*2*1*${this.id}##`,
             log: this.log,
             started: () => this.startConfirmationTimer(),
         });
@@ -350,9 +350,9 @@ export class OwnBlindAccessory extends OwnAccessory {
                     this.position = this.target;
                 }
             } else if (direction === '1') {
-                this.state = this.Characteristic.PositionState.INCREASING;
-            } else if (direction === '2') {
                 this.state = this.Characteristic.PositionState.DECREASING;
+            } else if (direction === '2') {
+                this.state = this.Characteristic.PositionState.INCREASING;
             } else {
                 this.log.warn('[%s] Blind unknown direction byte %s in packet %s', this.id, direction, packet);
                 return;
