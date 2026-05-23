@@ -46,6 +46,7 @@ class OwnAccessory {
     accessory: PlatformAccessory;
     name: string;
     protected id: number;
+    protected category: string;
 
     constructor(platform: OwnPlatformLike, accessory: PlatformAccessory, config: BaseConfig) {
         this.log = platform.log;
@@ -57,6 +58,7 @@ class OwnAccessory {
 
         this.name = config.name ?? '';
         this.id = config.id;
+        this.category = 'Accessory';
 
         if (!Number.isInteger(this.id) || this.id <= 0) {
             throw new Error(`homebridge-myhome: invalid accessory id "${config.id}" — must be a positive integer`);
@@ -68,8 +70,25 @@ class OwnAccessory {
             .setCharacteristic(this.Characteristic.SerialNumber, `MyHome-${this.id}`);
     }
 
+    protected label(message: string): string {
+        const normalized = message.replace(/^\[\d+\]\s*/, '');
+        return `${this.category} [${this.id}] ${normalized}`;
+    }
+
     updateStatus(): void {
-        this.log.info(`[${this.id}] Accessory updateStatus`);
+        this.log.info(this.label('Accessory updateStatus'));
+    }
+
+    protected logFrameInfo(message: string, packet: string): void {
+        this.log.info(`${this.label(message)} FRAME:${packet}`);
+    }
+
+    protected logFrameDebug(message: string, packet: string): void {
+        this.log.debug(`${this.label(message)} FRAME:${packet}`);
+    }
+
+    protected logFrameWarn(message: string, packet: string): void {
+        this.log.warn(`${this.label(message)} FRAME:${packet}`);
     }
 
     onData(packet: string): void {
@@ -98,6 +117,7 @@ export class OwnLightAccessory extends OwnAccessory {
     constructor(platform: OwnPlatformLike, accessory: PlatformAccessory, config: LightConfig) {
         if (!config.name) config.name = `light-${config.id}`;
         super(platform, accessory, config);
+        this.category = 'Light';
 
         this.value = false;
         this.dimmer = config.dimmer ?? false;
@@ -117,7 +137,7 @@ export class OwnLightAccessory extends OwnAccessory {
         this.lightbulbService.getCharacteristic(this.Characteristic.On)
             .onGet(() => this.value)
             .onSet((value: CharacteristicValue) => {
-                this.log.info(`[${this.id}] Setting power state to ${value ? 'on' : 'off'}`);
+                this.log.info(this.label(`Setting power state to ${value ? 'on' : 'off'}`));
                 this.value = value as boolean;
                 if (value && this.dimmer) {
                     this.scheduleDimmerOn();
@@ -131,7 +151,7 @@ export class OwnLightAccessory extends OwnAccessory {
             this.lightbulbService.getCharacteristic(this.Characteristic.Brightness)
                 .onGet(() => this.brightness)
                 .onSet((value: CharacteristicValue) => {
-                    this.log.info(`[${this.id}] Setting brightness to ${value}`);
+                    this.log.info(this.label(`Setting brightness to ${value}`));
                     this.cancelDimmerOn();
                     this.brightness = value as number;
                     if (value === 0) {
@@ -149,9 +169,9 @@ export class OwnLightAccessory extends OwnAccessory {
     }
 
     updateStatus(): void {
-        this.log.info(`[${this.id}] Light updateStatus`);
+        this.log.info(this.label('Light updateStatus'));
         if (this.disableStatusQuery) {
-            this.log.info(`[${this.id}] Light status query disabled`);
+            this.log.info(this.label('Light status query disabled'));
             return;
         }
         this.controller.sendCommand({
@@ -196,13 +216,13 @@ export class OwnLightAccessory extends OwnAccessory {
         const ext = packet.match(/^\*1\*1000#(\d+)\*[\d#]+##$/);
         const extract = ext ?? packet.match(/^\*1\*(\d+)\*[\d#]+##$/);
         if (extract) {
-            this.log.debug('id:%s onLight(%s)', this.id, packet);
+            this.logFrameDebug(`id:${this.id} onLight(${packet})`, packet);
             const level = parseInt(extract[1], 10);
             if (level === 0) {
-                this.log.info(`[${this.id}] power off`);
+                this.logFrameInfo('power off', packet);
                 this.value = false;
             } else {
-                this.log.info(`[${this.id}] power on (level ${level})`);
+                this.logFrameInfo(`power on (level ${level})`, packet);
                 this.value = true;
                 if (this.dimmer && level >= 1) {
                     this.brightness = Math.min(100, Math.max(1, level * 10));
@@ -246,6 +266,7 @@ export class OwnBlindAccessory extends OwnAccessory {
     constructor(platform: OwnPlatformLike, accessory: PlatformAccessory, config: BlindConfig) {
         if (!config.name) config.name = `blind-${config.id}`;
         super(platform, accessory, config);
+        this.category = 'Blind';
 
         if (!config.time || config.time <= 0) {
             throw new Error(`homebridge-myhome: blind id=${config.id} requires a positive "time" value`);
@@ -280,7 +301,7 @@ export class OwnBlindAccessory extends OwnAccessory {
         this.windowCoveringService.getCharacteristic(this.Characteristic.TargetPosition)
             .onGet(() => this.target)
             .onSet((target: CharacteristicValue) => {
-                this.log.info(`[${this.id}] Blind setting Target :${target}`);
+                this.log.info(this.label(`Blind setting Target :${target}`));
                 this.stopMoveTracking();
                 this.target = target as number;
                 this.move();
@@ -291,7 +312,7 @@ export class OwnBlindAccessory extends OwnAccessory {
 
         this.windowCoveringService.getCharacteristic(this.Characteristic.HoldPosition)
             .onSet((hold: CharacteristicValue) => {
-                this.log.info(`[${this.id}] Blind hold position :${hold}`);
+                this.log.info(this.label(`Blind hold position :${hold}`));
                 this.stopMoveTracking();
                 this.target = this.position;
                 this.move();
@@ -299,9 +320,9 @@ export class OwnBlindAccessory extends OwnAccessory {
     }
 
     updateStatus(): void {
-        this.log.info(`[${this.id}] Blind updateStatus`);
+        this.log.info(this.label('Blind updateStatus'));
         if (!this.initStartPosition) {
-            this.log.info(`[${this.id}] Initialization phase of blind: keep cached position ${this.position} without querying state`);
+            this.log.info(this.label(`Initialization phase of blind: keep cached position ${this.position} without querying state`));
             this.initStartPosition = true;
         }
     }
@@ -345,7 +366,7 @@ export class OwnBlindAccessory extends OwnAccessory {
 
         this.publishState();
         this.publishPosition();
-        this.log.info(`[${this.id}] Blind movement finished locally pos:${this.position}`);
+        this.log.info(this.label(`Blind movement finished locally pos:${this.position}`));
     }
 
     startTimerCommand(): void {
@@ -363,7 +384,7 @@ export class OwnBlindAccessory extends OwnAccessory {
     endTimerCommand(): void {
         if (this.state !== this.expectedState) {
             this.state = this.expectedState;
-            this.log.warn(`[${this.id}] Blind command confirmation not received, forcing state to: ${this.expectedState}`);
+            this.log.warn(this.label(`Blind command confirmation not received, forcing state to: ${this.expectedState}`));
             this.publishState();
             this.updateStatus();
         } else if (this.homeKitMovement) {
@@ -380,7 +401,7 @@ export class OwnBlindAccessory extends OwnAccessory {
     }
 
     moveStop(): void {
-        this.log.info(`[${this.id}] Blind sending stop`);
+        this.log.info(this.label('Blind sending stop'));
         this.homeKitMovement = false;
         this.expectedState = this.Characteristic.PositionState.STOPPED;
         this.startTimerCommand();
@@ -392,7 +413,7 @@ export class OwnBlindAccessory extends OwnAccessory {
     }
 
     moveUp(): void {
-        this.log.info(`[${this.id}] Blind sending move up`);
+        this.log.info(this.label('Blind sending move up'));
         this.homeKitMovement = true;
         this.expectedState = this.Characteristic.PositionState.INCREASING;
         this.startTimerCommand();
@@ -404,7 +425,7 @@ export class OwnBlindAccessory extends OwnAccessory {
     }
 
     moveDown(): void {
-        this.log.info(`[${this.id}] Blind sending move down`);
+        this.log.info(this.label('Blind sending move down'));
         this.homeKitMovement = true;
         this.expectedState = this.Characteristic.PositionState.DECREASING;
         this.startTimerCommand();
@@ -441,16 +462,16 @@ export class OwnBlindAccessory extends OwnAccessory {
                 return;
             }
             this.publishState();
-            this.log.info(`[${this.id}] received state dir:${direction} position:${this.position} target:${this.target}`);
+            this.logFrameInfo(`received state dir:${direction} position:${this.position} target:${this.target}`, packet);
 
             if (this.commandIsPending() && this.expectedState === this.state) {
-                this.log.info(`[${this.id}] expected state ${this.expectedState} reached`);
+                this.log.info(this.label(`expected state ${this.expectedState} reached`));
                 this.endTimerCommand();
             } else if (this.homeKitMovement && this.state !== prevState
                     && this.state !== this.expectedState
                     && !this.inStatusQuery) {
                 // Physical button pressed while HomeKit movement was in progress — yield immediately
-                this.log.info(`[${this.id}] Physical override detected, cancelling HomeKit movement`);
+                this.log.info(this.label('Physical override detected, cancelling HomeKit movement'));
                 this.stopMoveTracking();
             }
 
@@ -466,11 +487,11 @@ export class OwnBlindAccessory extends OwnAccessory {
     evaluatePosition(): void {
         clearTimeout(this.positionTimeout);
         if (this.state === this.Characteristic.PositionState.STOPPED) {
-            this.log.info(`[${this.id}] Blind is STOPPED pos:${this.position} target:${this.target}`);
+            this.log.info(this.label(`Blind is STOPPED pos:${this.position} target:${this.target}`));
         } else if (this.state === this.Characteristic.PositionState.INCREASING) {
             if (this.position < 100) this.position++;
             if (this.position % 10 === 0 || this.position >= this.target)
-                this.log.info(`[${this.id}] Blind moving UP pos:${this.position} target:${this.target}`);
+                this.log.info(this.label(`Blind moving UP pos:${this.position} target:${this.target}`));
             if (this.homeKitMovement && this.position >= this.target) {
                 this.moveStop();
             } else if (!this.homeKitMovement && this.position >= 100) {
@@ -481,7 +502,7 @@ export class OwnBlindAccessory extends OwnAccessory {
         } else if (this.state === this.Characteristic.PositionState.DECREASING) {
             if (this.position > 0) this.position--;
             if (this.position % 10 === 0 || this.position <= this.target)
-                this.log.info(`[${this.id}] Blind moving DOWN pos:${this.position} target:${this.target}`);
+                this.log.info(this.label(`Blind moving DOWN pos:${this.position} target:${this.target}`));
             if (!this.initPhase && this.homeKitMovement && this.position <= this.target) {
                 this.moveStop();
             } else if (this.initPhase && this.position === 0) {
@@ -509,7 +530,7 @@ export class OwnBlindAccessory extends OwnAccessory {
 
     move(): void {
         if (this.commandIsPending()) {
-            this.log.info(`[${this.id}] Blind command is still pending: wait for action`);
+            this.log.info(this.label('Blind command is still pending: wait for action'));
             clearTimeout(this.moveTrackingTimeout);
             this.moveTrackingTimeout = setTimeout(this.move.bind(this), 500);
             return;
@@ -532,7 +553,7 @@ export class OwnBlindAccessory extends OwnAccessory {
             if (this.state !== this.Characteristic.PositionState.STOPPED) {
                 this.moveStop();
             }
-            this.log.info(`[${this.id}] Blind position is good: stop moving ${this.position} target:${this.target}`);
+            this.log.info(this.label(`Blind position is good: stop moving ${this.position} target:${this.target}`));
             return;
         }
         if (!this.commandSent && !this.positionTimeout) {
@@ -588,6 +609,7 @@ export class OwnThermostatAccessory extends OwnAccessory {
     constructor(platform: OwnPlatformLike, accessory: PlatformAccessory, config: ThermostatConfig) {
         if (!config.name) config.name = `thermostat-${config.id}`;
         super(platform, accessory, config);
+        this.category = 'Thermostat';
 
         if (!Number.isInteger(config.zone) || config.zone <= 0) {
             throw new Error(`homebridge-myhome: thermostat id=${config.id} requires a positive integer "zone"`);
@@ -616,21 +638,21 @@ export class OwnThermostatAccessory extends OwnAccessory {
             .onGet(() => this.targetHeatingCoolingState)
             .onSet((value: CharacteristicValue) => {
                 this.targetHeatingCoolingState = value as number;
-                this.log.info(`[${this.id}] zone[${this.zone}] setTargetHeatingCoolingState:${value}`);
+                this.log.info(this.label(`zone[${this.zone}] setTargetHeatingCoolingState:${value}`));
                 switch (value) {
                     case this.Characteristic.TargetHeatingCoolingState.HEAT: {
                         const temperature = OwnProtcol.encodeTemperature(this.targetTemperature);
-                        this.log.info(`[${this.id}] send Heat Manual at ${temperature}`);
+                        this.log.info(this.label(`send Heat Manual at ${temperature}`));
                         this.controller.sendCommand({ command: `*#4*${this.address}*#14*${temperature}*1##`, log: this.log });
                         break;
                     }
                     case this.Characteristic.TargetHeatingCoolingState.OFF:
                         this.controller.sendCommand({ command: `*4*103*${this.address}##`, log: this.log });
-                        this.log.info(`[${this.id}] send STOP`);
+                        this.log.info(this.label('send STOP'));
                         break;
                     case this.Characteristic.TargetHeatingCoolingState.AUTO:
                         this.controller.sendCommand({ command: `*4*3100*${this.address}##`, log: this.log });
-                        this.log.info(`[${this.id}] send AUTO`);
+                        this.log.info(this.label('send AUTO'));
                         break;
                 }
             });
@@ -643,7 +665,7 @@ export class OwnThermostatAccessory extends OwnAccessory {
             .setProps({ minValue: -50, minStep: 0.1, maxValue: 50 })
             .onGet(() => this.targetTemperature)
             .onSet((value: CharacteristicValue) => {
-                this.log.info(`[${this.id}] zone[${this.zone}] setTargetTemperature:${value}`);
+                this.log.info(this.label(`zone[${this.zone}] setTargetTemperature:${value}`));
                 if (this.targetHeatingCoolingState !== this.Characteristic.TargetHeatingCoolingState.HEAT) {
                     this.log.error("Can't change target temperature with mode (%s)", this.targetHeatingCoolingState);
                     throw new this.HapStatusError(-70412);
@@ -659,7 +681,7 @@ export class OwnThermostatAccessory extends OwnAccessory {
     }
 
     updateStatus(): void {
-        this.log.info(`[${this.id}] Thermostat updateStatus`);
+        this.log.info(this.label('Thermostat updateStatus'));
         const handler = (pkt: string) => { this.onData(pkt); };
         this.controller.sendCommand({ command: `*#4*${this.address}##`, log: this.log, packet: handler });
         this.controller.sendCommand({ command: `*#4*${this.id}##`, log: this.log, packet: handler });
@@ -670,25 +692,25 @@ export class OwnThermostatAccessory extends OwnAccessory {
     }
 
     updateCharacteristicCurrentTemperature(temperature: number): void {
-        this.log.info(`[${this.id}] update CurrentTemperature (${temperature})`);
+        this.log.info(this.label(`update CurrentTemperature (${temperature})`));
         this.temperature = temperature;
         this.thermostatService.getCharacteristic(this.Characteristic.CurrentTemperature).updateValue(this.temperature);
     }
 
     updateCharacteristicTargetTemperature(temperature: number): void {
-        this.log.info(`[${this.id}] update TargetTemperature (${temperature})`);
+        this.log.info(this.label(`update TargetTemperature (${temperature})`));
         this.targetTemperature = temperature;
         this.thermostatService.getCharacteristic(this.Characteristic.TargetTemperature).updateValue(this.targetTemperature);
     }
 
     updateCharacteristicTargetHeatingCoolingState(state: number): void {
-        this.log.info(`[${this.id}] update TargetHeatingCoolingState (${state})`);
+        this.log.info(this.label(`update TargetHeatingCoolingState (${state})`));
         this.targetHeatingCoolingState = state;
         this.thermostatService.getCharacteristic(this.Characteristic.TargetHeatingCoolingState).updateValue(this.targetHeatingCoolingState);
     }
 
     updateCharacteristicCurrentHeatingCoolingState(state: number): void {
-        this.log.info(`[${this.id}] update CurrentHeatingCoolingState (${state})`);
+        this.log.info(this.label(`update CurrentHeatingCoolingState (${state})`));
         this.heatingCoolingState = state;
         this.thermostatService.getCharacteristic(this.Characteristic.CurrentHeatingCoolingState).updateValue(this.heatingCoolingState);
     }
@@ -699,7 +721,7 @@ export class OwnThermostatAccessory extends OwnAccessory {
             this.updateCharacteristicCurrentTemperature(OwnProtcol.decodeTemperature(extract[1]));
         } else if ((extract = packet.match(/^\*#4\*\d+\*12\*(\d+)\*3##$/))) {
             const probeTemp = OwnProtcol.decodeTemperature(extract[1]);
-            this.log.debug(`[${this.id}] zone[${this.zone}] probe temperature with local offset (${probeTemp})`);
+            this.log.debug(this.label(`zone[${this.zone}] probe temperature with local offset (${probeTemp})`));
         } else if ((extract = packet.match(/^\*#4\*\d+\*13\*(\d+)##$/))) {
             let status = 'Local ON';
             const value = extract[1];
@@ -722,13 +744,13 @@ export class OwnThermostatAccessory extends OwnAccessory {
             const coolingActive = ['1', '2'].includes(CV);
             const heatingActive = ['1', '2'].includes(HV);
             if (heatingActive) {
-                this.log.debug(`[${this.id}] zone[${this.zone}] heating ON`);
+                this.log.debug(this.label(`zone[${this.zone}] heating ON`));
                 this.updateCharacteristicCurrentHeatingCoolingState(this.Characteristic.CurrentHeatingCoolingState.HEAT);
             } else if (coolingActive) {
-                this.log.debug(`[${this.id}] zone[${this.zone}] cooling ON`);
+                this.log.debug(this.label(`zone[${this.zone}] cooling ON`));
                 this.updateCharacteristicCurrentHeatingCoolingState(this.Characteristic.CurrentHeatingCoolingState.COOL);
             } else {
-                this.log.debug(`[${this.id}] zone[${this.zone}] heating/cooling OFF`);
+                this.log.debug(this.label(`zone[${this.zone}] heating/cooling OFF`));
                 this.updateCharacteristicCurrentHeatingCoolingState(this.Characteristic.CurrentHeatingCoolingState.OFF);
             }
         } else if ((extract = packet.match(/^\*#4\*\d+#\d+\*20\*(\d+)##$/))) {
@@ -738,7 +760,7 @@ export class OwnThermostatAccessory extends OwnAccessory {
             else if (value === '1') status = 'ON';
             else if (value === '4') status = 'STOP';
             else status = `not decoded:${value}`;
-            this.log.debug(`[${this.id}] zone[${this.zone}] actuator status (${status})`);
+            this.log.debug(this.label(`zone[${this.zone}] actuator status (${status})`));
         } else if ((extract = packet.match(/^\*4\*(\d+)\*\d+##$/))) {
             let status = '';
             const value = extract[1];
@@ -748,7 +770,7 @@ export class OwnThermostatAccessory extends OwnAccessory {
             else if (value === '202') status = 'Thermal Protection';
             else if (value === '303') status = 'Generic OFF';
             else this.log.error('[%s] zone[%s] operation mode (%s)', this.id, this.zone, value);
-            this.log.debug(`[${this.id}] zone[${this.zone}] operation mode (${status})`);
+            this.log.debug(this.label(`zone[${this.zone}] operation mode (${status})`));
             const hkCurrentState = (value === '1' || value === '102')
                 ? this.Characteristic.CurrentHeatingCoolingState.HEAT
                 : (value === '0')
@@ -799,6 +821,7 @@ export class OwnScenarioAccessory extends OwnAccessory {
     constructor(platform: OwnPlatformLike, accessory: PlatformAccessory, config: ScenarioConfig) {
         if (!config.name) config.name = `scenario-${config.id}`;
         super(platform, accessory, config);
+        this.category = 'Scenario';
 
         this.resetTimeout = undefined;
 
@@ -812,7 +835,7 @@ export class OwnScenarioAccessory extends OwnAccessory {
             .onGet(() => false)
             .onSet((value: CharacteristicValue) => {
                 if (value) {
-                    this.log.info(`[${this.id}] Scenario activate`);
+                    this.log.info(this.label('Scenario activate'));
                     this.controller.sendCommand({ command: `*0*${this.id}*0##`, log: this.log });
                     clearTimeout(this.resetTimeout);
                     this.resetTimeout = setTimeout(() => {
@@ -834,6 +857,7 @@ export class OwnContactAccessory extends OwnAccessory {
     constructor(platform: OwnPlatformLike, accessory: PlatformAccessory, config: ContactConfig) {
         if (!config.name) config.name = `contact-${config.id}`;
         super(platform, accessory, config);
+        this.category = 'Contact';
 
         this.contactState = this.Characteristic.ContactSensorState.CONTACT_DETECTED;
 
@@ -848,7 +872,7 @@ export class OwnContactAccessory extends OwnAccessory {
     }
 
     updateStatus(): void {
-        this.log.info(`[${this.id}] Contact updateStatus`);
+        this.log.info(this.label('Contact updateStatus'));
         this.controller.sendCommand({
             command: `*#9*${this.id}##`,
             log: this.log,
@@ -862,7 +886,7 @@ export class OwnContactAccessory extends OwnAccessory {
             this.contactState = extract[1] === '0'
                 ? this.Characteristic.ContactSensorState.CONTACT_DETECTED
                 : this.Characteristic.ContactSensorState.CONTACT_NOT_DETECTED;
-            this.log.info(`[${this.id}] Contact state: ${this.contactState}`);
+            this.log.info(this.label(`Contact state: ${this.contactState}`));
             this.contactService.getCharacteristic(this.Characteristic.ContactSensorState).updateValue(this.contactState);
         } else {
             this.log.error('[%s] Contact unknown packet:%s', this.id, packet);
@@ -878,6 +902,7 @@ export class OwnEnergyAccessory extends OwnAccessory {
     constructor(platform: OwnPlatformLike, accessory: PlatformAccessory, config: EnergyConfig) {
         if (!config.name) config.name = `energy-${config.id}`;
         super(platform, accessory, config);
+        this.category = 'Energy';
 
         this.watts = 0.0001;
 
@@ -900,7 +925,7 @@ export class OwnEnergyAccessory extends OwnAccessory {
     }
 
     updateStatus(): void {
-        this.log.debug(`[${this.id}] Energy updateStatus`);
+        this.log.debug(this.label('Energy updateStatus'));
         this.controller.sendCommand({
             command: `*#18*${this.id}*113##`,
             log: this.log,
@@ -912,7 +937,7 @@ export class OwnEnergyAccessory extends OwnAccessory {
         const extract = packet.match(/^\*#18\*\d+\*113\*(\d+)##$/);
         if (extract) {
             this.watts = Math.max(0.0001, parseInt(extract[1], 10));
-            this.log.debug(`[${this.id}] Energy: ${this.watts}W`);
+            this.log.debug(this.label(`Energy: ${this.watts}W`));
             this.energyService.getCharacteristic(this.Characteristic.CurrentAmbientLightLevel).updateValue(this.watts);
         } else {
             this.log.debug('[%s] Energy: ignoring packet %s', this.id, packet);
