@@ -1,7 +1,7 @@
 import type { API, DynamicPlatformPlugin, Logging, PlatformAccessory, PlatformConfig, Service, Characteristic } from 'homebridge';
 import { PLUGIN_NAME, PLATFORM_NAME } from './constants';
 import { OwnClient } from './OwnNet';
-import { OwnProtcol, WHO } from './OwnProtcol';
+import { OwnProtcol, WHO, WhoValue } from './OwnProtcol';
 import {
     OwnLightAccessory,
     OwnBlindAccessory,
@@ -56,6 +56,17 @@ function modelLabel(code: string | null): string {
     const n = parseInt(code, 10);
     const name = MODEL_NAMES[n];
     return name ? `${name} (code ${code})` : `unknown (code ${code})`;
+}
+
+function handlerSupportsWho(handler: AnyAccessory, who: WhoValue | null): boolean {
+    switch (who) {
+        case WHO.light: return handler instanceof OwnLightAccessory;
+        case WHO.automation: return handler instanceof OwnBlindAccessory;
+        case WHO.temperature: return handler instanceof OwnThermostatAccessory;
+        case WHO.auxiliary: return handler instanceof OwnContactAccessory;
+        case WHO.energy: return handler instanceof OwnEnergyAccessory;
+        default: return true;
+    }
 }
 
 export class OwnPlatform implements DynamicPlatformPlugin {
@@ -226,7 +237,7 @@ export class OwnPlatform implements DynamicPlatformPlugin {
                 case WHO.temperature:
                 case WHO.auxiliary:
                 case WHO.energy:
-                    this.onAccessory(info.where, packet);
+                    this.onAccessory(info.where, packet, info.who);
                     break;
                 case WHO.gateway:
                     this.log.debug('Gateway packet', packet);
@@ -239,9 +250,9 @@ export class OwnPlatform implements DynamicPlatformPlugin {
         }
     }
 
-    onAccessory(where: string | null, packet: string): void {
+    onAccessory(where: string | null, packet: string, who: WhoValue | null = null): void {
         if (!where) return;
-        const handler = this.activeHandlers.find(h => h.checkWhere(where));
+        const handler = this.activeHandlers.find(h => handlerSupportsWho(h, who) && h.checkWhere(where));
         if (handler) {
             handler.onData(packet);
         } else {

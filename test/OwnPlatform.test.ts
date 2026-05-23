@@ -213,6 +213,25 @@ describe('OwnPlatform.onMonitor', () => {
         assert.ok(called);
     });
 
+    it('routes automation packet to blind when a light has the same id', () => {
+        const api = makeMockApi();
+        const platform = makePlatformInstance({
+            host: '127.0.0.1',
+            lights: [{ id: 68, name: 'L' }],
+            blinds: [{ id: 68, name: 'B', time: 20 }],
+        }, api);
+        platform.discoverDevices();
+        let lightCalled = false;
+        let blindCalled = false;
+        platform.activeHandlers[0].onData = (_p: string) => { lightCalled = true; };
+        platform.activeHandlers[1].onData = (_p: string) => { blindCalled = true; };
+
+        platform.onMonitor('*2*1*68##');
+
+        assert.equal(lightCalled, false);
+        assert.equal(blindCalled, true);
+    });
+
     it('logs debug for gateway packet', () => {
         const api = makeMockApi();
         const platform = makePlatformInstance({ host: '127.0.0.1' }, api);
