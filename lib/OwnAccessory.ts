@@ -317,6 +317,37 @@ export class OwnBlindAccessory extends OwnAccessory {
         this.accessory.context.blindPosition = this.position;
     }
 
+    private publishPosition(): void {
+        this.windowCoveringService.getCharacteristic(this.Characteristic.CurrentPosition).updateValue(this.position);
+        this.windowCoveringService.getCharacteristic(this.Characteristic.TargetPosition).updateValue(this.target);
+        this.cachePosition();
+    }
+
+    private publishState(): void {
+        this.windowCoveringService.getCharacteristic(this.Characteristic.PositionState).updateValue(this.state);
+    }
+
+    private finishMovementAt(position: number): void {
+        clearTimeout(this.moveTrackingTimeout);
+        this.moveTrackingTimeout = undefined;
+        clearTimeout(this.positionTimeout);
+        this.positionTimeout = undefined;
+        clearTimeout(this.packetTimeout);
+        this.packetTimeout = undefined;
+        this.commandSent = false;
+        this.homeKitMovement = false;
+        this.moveRetries = 0;
+
+        this.position = Math.min(100, Math.max(0, Math.round(position)));
+        this.target = this.position;
+        this.expectedState = this.Characteristic.PositionState.STOPPED;
+        this.state = this.Characteristic.PositionState.STOPPED;
+
+        this.publishState();
+        this.publishPosition();
+        this.log.info(`[${this.id}] Blind movement finished locally pos:${this.position}`);
+    }
+
     startTimerCommand(): void {
         clearTimeout(this.packetTimeout);
         this.packetTimeout = undefined;
@@ -333,6 +364,7 @@ export class OwnBlindAccessory extends OwnAccessory {
         if (this.state !== this.expectedState) {
             this.state = this.expectedState;
             this.log.warn(`[${this.id}] Blind command confirmation not received, forcing state to: ${this.expectedState}`);
+            this.publishState();
             this.updateStatus();
         } else if (this.homeKitMovement) {
             // Absorb gateway echo packets (old-format STOP arriving after UP/DOWN confirmation)
@@ -408,7 +440,7 @@ export class OwnBlindAccessory extends OwnAccessory {
                 this.log.warn('[%s] Blind unknown direction byte %s in packet %s', this.id, direction, packet);
                 return;
             }
-            this.windowCoveringService.getCharacteristic(this.Characteristic.PositionState).updateValue(this.state);
+            this.publishState();
             this.log.info(`[${this.id}] received state dir:${direction} position:${this.position} target:${this.target}`);
 
             if (this.commandIsPending() && this.expectedState === this.state) {
@@ -442,7 +474,7 @@ export class OwnBlindAccessory extends OwnAccessory {
             if (this.homeKitMovement && this.position >= this.target) {
                 this.moveStop();
             } else if (!this.homeKitMovement && this.position >= 100) {
-                // physical movement reached upper end-stop — wait for gateway STOP packet
+                this.finishMovementAt(100);
             } else {
                 this.startPositionTracking();
             }
@@ -455,13 +487,12 @@ export class OwnBlindAccessory extends OwnAccessory {
             } else if (this.initPhase && this.position === 0) {
                 // at physical end-stop during init — wait for gateway STOP packet, do not reschedule
             } else if (!this.homeKitMovement && this.position <= 0) {
-                // physical movement reached lower end-stop — wait for gateway STOP packet
+                this.finishMovementAt(0);
             } else {
                 this.startPositionTracking();
             }
         }
-        this.windowCoveringService.getCharacteristic(this.Characteristic.CurrentPosition).updateValue(this.position);
-        this.cachePosition();
+        this.publishPosition();
     }
 
     msPerPercent(position: number): number {
@@ -518,7 +549,7 @@ export class OwnBlindAccessory extends OwnAccessory {
         }
         if (this.moveRetries > 30) {
             this.log.warn('[%s] Blind giving up after too many move retries', this.id);
-            this.moveRetries = 0;
+            this.finishMovementAt(this.position);
             return;
         }
         this.moveTrackingTimeout = setTimeout(this.move.bind(this), 500);

@@ -340,6 +340,7 @@ describe('OwnBlindAccessory', () => {
     });
 
     it('onData decreasing', () => {
+        handler.position = 50;
         handler.onData('*2*1*23##');
         assert.equal(handler.state, POSITION_STATE.DECREASING);
     });
@@ -527,6 +528,9 @@ describe('OwnBlindAccessory', () => {
         handler.position = 100;
         handler.evaluatePosition();
         assert.equal(handler.positionTimeout, undefined, 'must not reschedule at upper end-stop');
+        assert.equal(handler.state, POSITION_STATE.STOPPED);
+        assert.equal(handler.target, 100);
+        assert.equal(accessory.services['WindowCovering'].characteristics['PositionState'].value, POSITION_STATE.STOPPED);
     });
 
     it('evaluatePosition physical DOWN stops tracking at lower end-stop (pos=0)', () => {
@@ -536,6 +540,9 @@ describe('OwnBlindAccessory', () => {
         handler.target = 0;
         handler.evaluatePosition();
         assert.equal(handler.positionTimeout, undefined, 'must not reschedule at lower end-stop');
+        assert.equal(handler.state, POSITION_STATE.STOPPED);
+        assert.equal(handler.target, 0);
+        assert.equal(accessory.services['WindowCovering'].characteristics['PositionState'].value, POSITION_STATE.STOPPED);
     });
 
     it('updateStatus after init does not send status query', () => {
@@ -570,6 +577,17 @@ describe('OwnBlindAccessory', () => {
         // homeKitMovement must survive — no physical override during grace window
         assert.equal(handler.homeKitMovement, true,
             'homeKitMovement must survive echo STOP during grace window after confirmation');
+    });
+
+    it('endTimerCommand publishes forced STOPPED state when confirmation is missing', () => {
+        handler.state = POSITION_STATE.INCREASING;
+        handler.expectedState = POSITION_STATE.STOPPED;
+        handler.commandSent = true;
+
+        handler.endTimerCommand();
+
+        assert.equal(handler.state, POSITION_STATE.STOPPED);
+        assert.equal(accessory.services['WindowCovering'].characteristics['PositionState'].value, POSITION_STATE.STOPPED);
     });
 
     it('physical override fires for genuine direction reversal (INCREASING→DECREASING)', () => {
