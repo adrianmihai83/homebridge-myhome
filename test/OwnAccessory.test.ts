@@ -394,6 +394,7 @@ describe('OwnBlindAccessory', () => {
         handler.moveTrackingTimeout = setTimeout(() => {}, 100000);
         handler.packetTimeout = setTimeout(() => {}, 100000);
         handler.positionTimeout = setTimeout(() => {}, 100000);
+        handler.endStopTimeout = setTimeout(() => {}, 100000);
         handler.destroy();
     });
 
@@ -645,6 +646,90 @@ describe('OwnBlindAccessory', () => {
         const cmds = spy.calls.map((c: unknown[]) => (c[0] as { command: string }).command);
         assert.ok(cmds.some((c: string) => c === '*2*1*23##'));
         handler.destroy();
+    });
+
+    it('end-stop fallback finishes HomeKit UP movement when STOP never arrives', async () => {
+        const p = makeMockPlatform();
+        const a = makeMockAccessory();
+        a.addService('AccessoryInformation');
+        const h = new OwnBlindAccessory(p as unknown as P, a as unknown as A, { id: 24, name: 'fast-up', time: 0.01 });
+        h.position = 99;
+        h.target = 100;
+        h.state = POSITION_STATE.INCREASING;
+
+        h.moveUp();
+        h.commandSent = false;
+        await delay(550);
+
+        assert.equal(h.position, 100);
+        assert.equal(h.target, 100);
+        assert.equal(h.state, POSITION_STATE.STOPPED);
+        assert.equal(a.services['WindowCovering'].characteristics['PositionState'].value, POSITION_STATE.STOPPED);
+        h.destroy();
+    });
+
+    it('end-stop fallback finishes HomeKit DOWN movement when STOP never arrives', async () => {
+        const p = makeMockPlatform();
+        const a = makeMockAccessory();
+        a.addService('AccessoryInformation');
+        const h = new OwnBlindAccessory(p as unknown as P, a as unknown as A, { id: 25, name: 'fast-down', time: 0.01 });
+        h.position = 1;
+        h.target = 0;
+        h.state = POSITION_STATE.DECREASING;
+
+        h.moveDown();
+        h.commandSent = false;
+        await delay(550);
+
+        assert.equal(h.position, 0);
+        assert.equal(h.target, 0);
+        assert.equal(h.state, POSITION_STATE.STOPPED);
+        assert.equal(a.services['WindowCovering'].characteristics['PositionState'].value, POSITION_STATE.STOPPED);
+        h.destroy();
+    });
+
+    it('onData STOP clears pending end-stop fallback', () => {
+        handler.homeKitMovement = true;
+        handler.state = POSITION_STATE.INCREASING;
+        handler.position = 80;
+        handler.target = 100;
+        handler.moveUp();
+
+        assert.notEqual(handler.endStopTimeout, undefined);
+        handler.onData('*2*0*23##');
+
+        assert.equal(handler.endStopTimeout, undefined);
+        assert.equal(handler.state, POSITION_STATE.STOPPED);
+    });
+
+    it('onData physical UP starts end-stop fallback', () => {
+        handler.homeKitMovement = false;
+        handler.state = POSITION_STATE.STOPPED;
+        handler.position = 50;
+
+        handler.onData('*2*2*23##');
+
+        assert.notEqual(handler.endStopTimeout, undefined);
+        assert.equal(handler.state, POSITION_STATE.INCREASING);
+    });
+
+    it('end-stop fallback finishes non-HomeKit movement when STOP never arrives', async () => {
+        const p = makeMockPlatform();
+        const a = makeMockAccessory();
+        a.addService('AccessoryInformation');
+        const h = new OwnBlindAccessory(p as unknown as P, a as unknown as A, { id: 26, name: 'physical-fast', time: 0.01 });
+        h.homeKitMovement = false;
+        h.position = 99;
+        h.state = POSITION_STATE.INCREASING;
+
+        (h as unknown as { startEndStopFallback: (direction: number) => void }).startEndStopFallback(POSITION_STATE.INCREASING);
+        await delay(550);
+
+        assert.equal(h.position, 100);
+        assert.equal(h.target, 100);
+        assert.equal(h.state, POSITION_STATE.STOPPED);
+        assert.equal(a.services['WindowCovering'].characteristics['PositionState'].value, POSITION_STATE.STOPPED);
+        h.destroy();
     });
 });
 

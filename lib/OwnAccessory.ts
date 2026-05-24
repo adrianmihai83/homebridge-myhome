@@ -258,6 +258,7 @@ export class OwnBlindAccessory extends OwnAccessory {
   moveTrackingTimeout: ReturnType<typeof setTimeout> | undefined;
   packetTimeout: ReturnType<typeof setTimeout> | undefined;
   positionTimeout: ReturnType<typeof setTimeout> | undefined;
+  endStopTimeout: ReturnType<typeof setTimeout> | undefined;
   moveRetries: number;
   initPhase: boolean;
   homeKitMovement: boolean;
@@ -285,6 +286,7 @@ export class OwnBlindAccessory extends OwnAccessory {
     this.moveTrackingTimeout = undefined;
     this.packetTimeout = undefined;
     this.positionTimeout = undefined;
+    this.endStopTimeout = undefined;
     this.moveRetries = 0;
     this.initPhase = false;
     this.homeKitMovement = false;
@@ -350,6 +352,8 @@ export class OwnBlindAccessory extends OwnAccessory {
     this.positionTimeout = undefined;
     clearTimeout(this.packetTimeout);
     this.packetTimeout = undefined;
+    clearTimeout(this.endStopTimeout);
+    this.endStopTimeout = undefined;
     this.commandSent = false;
     this.homeKitMovement = false;
     this.moveRetries = 0;
@@ -397,8 +401,37 @@ export class OwnBlindAccessory extends OwnAccessory {
     return this.commandSent;
   }
 
+  private msToEndStop(direction: number): number {
+    const start = Math.min(100, Math.max(0, Math.round(this.position)));
+    let ms = 0;
+    if (direction === this.Characteristic.PositionState.INCREASING) {
+      for (let pos = start; pos < 100; pos++) {
+        ms += this.msPerPercent(pos);
+      }
+    } else {
+      for (let pos = start; pos > 0; pos--) {
+        ms += this.msPerPercent(pos);
+      }
+    }
+    return Math.max(500, ms);
+  }
+
+  private startEndStopFallback(direction: number): void {
+    clearTimeout(this.endStopTimeout);
+    const endPosition = direction === this.Characteristic.PositionState.INCREASING ? 100 : 0;
+    const timeoutMs = this.msToEndStop(direction);
+    this.endStopTimeout = setTimeout(() => {
+      this.endStopTimeout = undefined;
+      if (this.state !== direction) return;
+      this.log.warn(this.label(`Blind STOP not received after ${Math.round(timeoutMs / 1000)}s, assuming end-stop ${endPosition}`));
+      this.finishMovementAt(endPosition);
+    }, timeoutMs);
+  }
+
   moveStop(): void {
     this.log.info(this.label("Blind sending stop"));
+    clearTimeout(this.endStopTimeout);
+    this.endStopTimeout = undefined;
     this.homeKitMovement = false;
     this.expectedState = this.Characteristic.PositionState.STOPPED;
     this.startTimerCommand();
@@ -413,6 +446,7 @@ export class OwnBlindAccessory extends OwnAccessory {
     this.log.info(this.label("Blind sending move up"));
     this.homeKitMovement = true;
     this.expectedState = this.Characteristic.PositionState.INCREASING;
+    this.startEndStopFallback(this.Characteristic.PositionState.INCREASING);
     this.startTimerCommand();
     this.controller.sendCommand({
       command: `*2*2*${this.id}##`,
@@ -425,6 +459,7 @@ export class OwnBlindAccessory extends OwnAccessory {
     this.log.info(this.label("Blind sending move down"));
     this.homeKitMovement = true;
     this.expectedState = this.Characteristic.PositionState.DECREASING;
+    this.startEndStopFallback(this.Characteristic.PositionState.DECREASING);
     this.startTimerCommand();
     this.controller.sendCommand({
       command: `*2*1*${this.id}##`,
@@ -442,6 +477,8 @@ export class OwnBlindAccessory extends OwnAccessory {
       const prevState = this.state;
       if (direction === "0") {
         const wasDecreasing = this.state === this.Characteristic.PositionState.DECREASING;
+        clearTimeout(this.endStopTimeout);
+        this.endStopTimeout = undefined;
         this.state = this.Characteristic.PositionState.STOPPED;
         if (!this.initPhase || wasDecreasing) {
           this.initPhase = false;
@@ -452,8 +489,10 @@ export class OwnBlindAccessory extends OwnAccessory {
         }
       } else if (direction === "1") {
         this.state = this.Characteristic.PositionState.DECREASING;
+        this.startEndStopFallback(this.Characteristic.PositionState.DECREASING);
       } else if (direction === "2") {
         this.state = this.Characteristic.PositionState.INCREASING;
+        this.startEndStopFallback(this.Characteristic.PositionState.INCREASING);
       } else {
         this.log.warn("[%s] Blind unknown direction byte %s in packet %s", this.id, direction, packet);
         return;
@@ -582,6 +621,8 @@ export class OwnBlindAccessory extends OwnAccessory {
     this.positionTimeout = undefined;
     clearTimeout(this.packetTimeout);
     this.packetTimeout = undefined;
+    clearTimeout(this.endStopTimeout);
+    this.endStopTimeout = undefined;
     this.commandSent = false;
     this.homeKitMovement = false;
     this.moveRetries = 0;
@@ -591,6 +632,7 @@ export class OwnBlindAccessory extends OwnAccessory {
     clearTimeout(this.moveTrackingTimeout);
     clearTimeout(this.packetTimeout);
     clearTimeout(this.positionTimeout);
+    clearTimeout(this.endStopTimeout);
   }
 }
 
