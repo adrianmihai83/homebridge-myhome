@@ -485,8 +485,11 @@ export class OwnBlindAccessory extends OwnAccessory {
         }
         if (Math.abs(this.position - this.target) <= 3) {
           this.position = this.target;
-          this.cachePosition();
+        } else {
+          this.target = this.position;
         }
+        this.cachePosition();
+        this.publishPosition();
       } else if (direction === "1") {
         this.state = this.Characteristic.PositionState.DECREASING;
         this.startEndStopFallback(this.Characteristic.PositionState.DECREASING);

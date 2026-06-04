@@ -334,6 +334,26 @@ describe('OwnBlindAccessory', () => {
         assert.equal(handler.position, 50);
     });
 
+    it('onData stop aligns target to actual position when far from target', () => {
+        handler.state = POSITION_STATE.INCREASING;
+        handler.position = 91;
+        handler.target = 0;
+        handler.onData('*2*0*23##');
+        assert.equal(handler.state, POSITION_STATE.STOPPED);
+        assert.equal(handler.position, 91);
+        assert.equal(handler.target, 91);
+        assert.equal(accessory.services['WindowCovering'].characteristics['TargetPosition'].value, 91);
+    });
+
+    it('onData duplicate stop still publishes corrected target', () => {
+        handler.state = POSITION_STATE.STOPPED;
+        handler.position = 88;
+        handler.target = 0;
+        handler.onData('*2*0*23##');
+        assert.equal(handler.target, 88);
+        assert.equal(accessory.services['WindowCovering'].characteristics['TargetPosition'].value, 88);
+    });
+
     it('onData increasing', () => {
         handler.onData('*2*2*23##');
         assert.equal(handler.state, POSITION_STATE.INCREASING);
