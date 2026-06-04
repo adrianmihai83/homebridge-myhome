@@ -1,229 +1,241 @@
 {
-    "pluginAlias": "MyHome",
-    "pluginType": "platform",
-    "schema": {
-        "type": "object",
-        "properties": {
+  "pluginAlias": "MyHome",
+  "pluginType": "platform",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "title": "Name",
+        "type": "string",
+        "required": true,
+        "default": "MyHome"
+      },
+      "host": {
+        "title": "MyHome server address",
+        "type": "string",
+        "required": true,
+        "default": "192.168.1.35"
+      },
+      "port": {
+        "title": "MyHome server port",
+        "type": "string",
+        "required": false,
+        "default": "20000"
+      },
+      "password": {
+        "title": "MyHome server password",
+        "type": "string",
+        "required": false,
+        "default": ""
+      },
+      "maxConcurrent": {
+        "title": "Max concurrent commands",
+        "description": "Maximum number of simultaneous TCP command connections to the gateway (default: 2, increase to 3-4 if your gateway supports it)",
+        "type": "integer",
+        "required": false,
+        "default": 2,
+        "minimum": 1,
+        "maximum": 10
+      },
+      "debug": {
+        "title": "Enable debug logging",
+        "description": "Enable verbose debug logging for this plugin without requiring the Homebridge -D flag",
+        "type": "boolean",
+        "required": false,
+        "default": false
+      },
+      "lights": {
+        "title": "Lights",
+        "buttonText": "Add Light",
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "title": "id",
+              "type": "integer",
+              "required": true
+            },
             "name": {
-                "title": "Name",
-                "type": "string",
-                "required": true,
-                "default": "MyHome"
+              "title": "Name",
+              "type": "string",
+              "required": false
             },
-            "host": {
-                "title": "MyHome server address",
-                "type": "string",
-                "required": true,
-                "default": "192.168.1.35"
+            "dimmer": {
+              "title": "Dimmer",
+              "description": "Enable dimmer support (brightness levels 1-10, with 0 as off)",
+              "type": "boolean",
+              "required": false,
+              "default": false
             },
-            "port": {
-                "title": "MyHome server port",
-                "type": "string",
-                "required": false,
-                "default": "20000"
-            },
-            "password": {
-                "title": "MyHome server password",
-                "type": "string",
-                "required": false,
-                "default": ""
-            },
-            "maxConcurrent": {
-                "title": "Max concurrent commands",
-                "description": "Maximum number of simultaneous TCP command connections to the gateway (default: 2, increase to 3-4 if your gateway supports it)",
+            "brightnessSteps": {
+              "title": "Brightness steps",
+              "description": "Optional fixed brightness values in percent for dimmable lights. If set, HomeKit will expose only these values for this accessory.",
+              "type": "array",
+              "items": {
                 "type": "integer",
-                "required": false,
-                "default": 2,
-                "minimum": 1,
-                "maximum": 10
+                "minimum": 0,
+                "maximum": 100
+              },
+              "uniqueItems": true,
+              "required": false
             },
-            "debug": {
-                "title": "Enable debug logging",
-                "description": "Enable verbose debug logging for this plugin without requiring the Homebridge -D flag",
-                "type": "boolean",
-                "required": false,
-                "default": false
+            "where": {
+              "title": "OpenWebNet WHERE",
+              "description": "Optional raw OpenWebNet WHERE address, e.g. 68#4#01 for group/special relays. Defaults to id.",
+              "type": "string",
+              "required": false
             },
-            "lights": {
-                "title": "Lights",
-                "buttonText": "Add Light",
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "id": {
-                            "title": "id",
-                            "type": "integer",
-                            "required": true
-                        },
-                        "name": {
-                            "title": "Name",
-                            "type": "string",
-                            "required": false
-                        },
-                        "dimmer": {
-                            "title": "Dimmer",
-                            "description": "Enable dimmer support (brightness levels 1-10, with 0 as off)",
-                            "type": "boolean",
-                            "required": false,
-                            "default": false
-                        },
-                        "where": {
-                            "title": "OpenWebNet WHERE",
-                            "description": "Optional raw OpenWebNet WHERE address, e.g. 68#4#01 for group/special relays. Defaults to id.",
-                            "type": "string",
-                            "required": false
-                        },
-                        "frame_on": {
-                            "title": "Custom ON frame",
-                            "description": "Optional full OpenWebNet frame to send when HomeKit turns this light on.",
-                            "type": "string",
-                            "required": false
-                        },
-                        "frame_off": {
-                            "title": "Custom OFF frame",
-                            "description": "Optional full OpenWebNet frame to send when HomeKit turns this light off.",
-                            "type": "string",
-                            "required": false
-                        },
-                        "disableStatusQuery": {
-                            "title": "Disable status query",
-                            "description": "Do not query the gateway for this light status; useful for special relays that do not answer status reads.",
-                            "type": "boolean",
-                            "required": false,
-                            "default": false
-                        }
-                    }
-                }
+            "frame_on": {
+              "title": "Custom ON frame",
+              "description": "Optional full OpenWebNet frame to send when HomeKit turns this light on.",
+              "type": "string",
+              "required": false
             },
-            "blinds": {
-                "title": "Blinds",
-                "buttonText": "Add blind",
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "id": {
-                            "title": "id",
-                            "type": "integer",
-                            "required": true
-                        },
-                        "name": {
-                            "title": "Name",
-                            "type": "string",
-                            "required": false
-                        },
-                        "time": {
-                            "title": "Travel time (s)",
-                            "description": "Time in seconds for full linear travel (up or down)",
-                            "type": "integer",
-                            "required": true
-                        },
-                        "timeSlat": {
-                            "title": "Slat rotation time (s)",
-                            "description": "Additional time in seconds for slat rotation (venetian blinds only, leave 0 for roller blinds)",
-                            "type": "integer",
-                            "required": false,
-                            "default": 0
-                        },
-                        "slatPercent": {
-                            "title": "Slat threshold (%)",
-                            "description": "Position (%) below which slat rotation occurs. E.g. 10 means: 10%=blind down slats open, 0%=fully closed. Leave 0 for roller blinds.",
-                            "type": "integer",
-                            "required": false,
-                            "default": 0
-                        }
-                    }
-                }
+            "frame_off": {
+              "title": "Custom OFF frame",
+              "description": "Optional full OpenWebNet frame to send when HomeKit turns this light off.",
+              "type": "string",
+              "required": false
             },
-            "thermostats": {
-                "title": "Thermostats",
-                "buttonText": "Add Thermostat",
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "id": {
-                            "title": "id",
-                            "type": "integer",
-                            "required": true
-                        },
-                        "zone": {
-                            "title": "zone",
-                            "type": "integer",
-                            "required": true
-                        },
-                        "name": {
-                            "title": "Name",
-                            "type": "string",
-                            "required": false
-                        }
-                    }
-                }
-            },
-            "scenarios": {
-                "title": "Scenarios",
-                "buttonText": "Add Scenario",
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "id": {
-                            "title": "id",
-                            "description": "Scenario number (WHO=0)",
-                            "type": "integer",
-                            "required": true
-                        },
-                        "name": {
-                            "title": "Name",
-                            "type": "string",
-                            "required": false
-                        }
-                    }
-                }
-            },
-            "contacts": {
-                "title": "Dry Contacts",
-                "buttonText": "Add Contact",
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "id": {
-                            "title": "id",
-                            "description": "Auxiliary/dry contact address (WHO=9)",
-                            "type": "integer",
-                            "required": true
-                        },
-                        "name": {
-                            "title": "Name",
-                            "type": "string",
-                            "required": false
-                        }
-                    }
-                }
-            },
-            "energies": {
-                "title": "Energy Monitors",
-                "buttonText": "Add Energy Monitor",
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "id": {
-                            "title": "id",
-                            "description": "Energy meter address (WHO=18)",
-                            "type": "integer",
-                            "required": true
-                        },
-                        "name": {
-                            "title": "Name",
-                            "type": "string",
-                            "required": false
-                        }
-                    }
-                }
+            "disableStatusQuery": {
+              "title": "Disable status query",
+              "description": "Do not query the gateway for this light status; useful for special relays that do not answer status reads.",
+              "type": "boolean",
+              "required": false,
+              "default": false
             }
+          }
         }
+      },
+      "blinds": {
+        "title": "Blinds",
+        "buttonText": "Add blind",
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "title": "id",
+              "type": "integer",
+              "required": true
+            },
+            "name": {
+              "title": "Name",
+              "type": "string",
+              "required": false
+            },
+            "time": {
+              "title": "Travel time (s)",
+              "description": "Time in seconds for full linear travel (up or down)",
+              "type": "integer",
+              "required": true
+            },
+            "timeSlat": {
+              "title": "Slat rotation time (s)",
+              "description": "Additional time in seconds for slat rotation (venetian blinds only, leave 0 for roller blinds)",
+              "type": "integer",
+              "required": false,
+              "default": 0
+            },
+            "slatPercent": {
+              "title": "Slat threshold (%)",
+              "description": "Position (%) below which slat rotation occurs. E.g. 10 means: 10%=blind down slats open, 0%=fully closed. Leave 0 for roller blinds.",
+              "type": "integer",
+              "required": false,
+              "default": 0
+            }
+          }
+        }
+      },
+      "thermostats": {
+        "title": "Thermostats",
+        "buttonText": "Add Thermostat",
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "title": "id",
+              "type": "integer",
+              "required": true
+            },
+            "zone": {
+              "title": "zone",
+              "type": "integer",
+              "required": true
+            },
+            "name": {
+              "title": "Name",
+              "type": "string",
+              "required": false
+            }
+          }
+        }
+      },
+      "scenarios": {
+        "title": "Scenarios",
+        "buttonText": "Add Scenario",
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "title": "id",
+              "description": "Scenario number (WHO=0)",
+              "type": "integer",
+              "required": true
+            },
+            "name": {
+              "title": "Name",
+              "type": "string",
+              "required": false
+            }
+          }
+        }
+      },
+      "contacts": {
+        "title": "Dry Contacts",
+        "buttonText": "Add Contact",
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "title": "id",
+              "description": "Auxiliary/dry contact address (WHO=9)",
+              "type": "integer",
+              "required": true
+            },
+            "name": {
+              "title": "Name",
+              "type": "string",
+              "required": false
+            }
+          }
+        }
+      },
+      "energies": {
+        "title": "Energy Monitors",
+        "buttonText": "Add Energy Monitor",
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "title": "id",
+              "description": "Energy meter address (WHO=18)",
+              "type": "integer",
+              "required": true
+            },
+            "name": {
+              "title": "Name",
+              "type": "string",
+              "required": false
+            }
+          }
+        }
+      }
     }
+  }
 }

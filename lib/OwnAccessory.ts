@@ -17,6 +17,7 @@ export interface BaseConfig {
 
 export interface LightConfig extends BaseConfig {
   dimmer?: boolean;
+  brightnessSteps?: number[];
   where?: string;
   frame_on?: string;
   frame_off?: string;
@@ -108,6 +109,7 @@ export class OwnLightAccessory extends OwnAccessory {
   value: boolean;
   dimmer: boolean;
   brightness: number;
+  brightnessSteps?: number[];
   where: string;
   frameOn?: string;
   frameOff?: string;
@@ -127,6 +129,7 @@ export class OwnLightAccessory extends OwnAccessory {
     this.frameOn = config.frame_on?.trim();
     this.frameOff = config.frame_off?.trim();
     this.disableStatusQuery = config.disableStatusQuery ?? false;
+    this.brightnessSteps = config.brightnessSteps?.filter((value) => Number.isInteger(value) && value >= 0 && value <= 100).sort((a, b) => a - b);
     this.dimmerOnTimeout = undefined;
 
     this.accessory.getService(this.Service.AccessoryInformation)!.setCharacteristic(this.Characteristic.Model, "Light");
@@ -148,24 +151,29 @@ export class OwnLightAccessory extends OwnAccessory {
       });
 
     if (this.dimmer) {
-      this.lightbulbService
+      const brightness = this.lightbulbService
         .getCharacteristic(this.Characteristic.Brightness)
         .onGet(() => this.brightness)
         .onSet((value: CharacteristicValue) => {
-          this.log.info(this.label(`Setting brightness to ${value}`));
+          const requested = this.normalizeBrightness(value as number);
+          this.log.info(this.label(`Setting brightness to ${requested}`));
           this.cancelDimmerOn();
-          this.brightness = value as number;
-          if (value === 0) {
+          this.brightness = requested;
+          if (requested === 0) {
             this.value = false;
             this.lightbulbService.getCharacteristic(this.Characteristic.On).updateValue(false);
             this.controller.sendCommand({ command: this.commandForPower(false), log: this.log });
           } else {
             this.value = true;
             this.lightbulbService.getCharacteristic(this.Characteristic.On).updateValue(true);
-            const level = this.brightnessToLevel(value as number);
+            const level = this.brightnessToLevel(requested);
             this.controller.sendCommand({ command: this.commandForLevel(level), log: this.log });
           }
         });
+
+      if (this.brightnessSteps?.length) {
+        brightness.setProps({ validValues: this.brightnessSteps });
+      }
     }
   }
 
@@ -206,6 +214,27 @@ export class OwnLightAccessory extends OwnAccessory {
 
   private brightnessToLevel(brightness: number): number {
     return Math.min(10, Math.max(1, Math.ceil(brightness / 10)));
+  }
+
+  private normalizeBrightness(value: number): number {
+    if (!this.brightnessSteps?.length) {
+      return Math.min(100, Math.max(0, value));
+    }
+
+    if (value === 0) {
+      return 0;
+    }
+
+    let closest = this.brightnessSteps[0];
+    let smallestDiff = Math.abs(value - closest);
+    for (const step of this.brightnessSteps) {
+      const diff = Math.abs(value - step);
+      if (diff < smallestDiff) {
+        closest = step;
+        smallestDiff = diff;
+      }
+    }
+    return closest;
   }
 
   private commandForLevel(level: number): string {
