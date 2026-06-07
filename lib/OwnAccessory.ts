@@ -505,6 +505,14 @@ export class OwnBlindAccessory extends OwnAccessory {
       const direction = extract[1];
       const prevState = this.state;
       if (direction === "0") {
+        if (
+          this.commandIsPending() &&
+          this.expectedState !== this.Characteristic.PositionState.STOPPED &&
+          prevState === this.Characteristic.PositionState.STOPPED
+        ) {
+          this.logFrameInfo(`ignored stale stop while waiting for state:${this.expectedState} position:${this.position} target:${this.target}`, packet);
+          return;
+        }
         const wasDecreasing = this.state === this.Characteristic.PositionState.DECREASING;
         clearTimeout(this.endStopTimeout);
         this.endStopTimeout = undefined;

@@ -354,6 +354,29 @@ describe('OwnBlindAccessory', () => {
         assert.equal(accessory.services['WindowCovering'].characteristics['TargetPosition'].value, 88);
     });
 
+    it('onData stale stop before move confirmation does not reset HomeKit target', () => {
+        const spy = platform.sendCommandSpy;
+        spy.calls.length = 0;
+        handler.state = POSITION_STATE.STOPPED;
+        handler.position = 0;
+        handler.target = 100;
+
+        handler.moveUp();
+        handler.onData('*2*0*23##');
+
+        assert.equal(handler.target, 100);
+        assert.equal(handler.commandSent, true);
+        assert.notEqual(handler.endStopTimeout, undefined);
+
+        handler.onData('*2*2*23##');
+
+        assert.equal(handler.state, POSITION_STATE.INCREASING);
+        assert.equal(handler.target, 100);
+        assert.equal(handler.position, 1);
+        const cmds = spy.calls.map((c: unknown[]) => (c[0] as { command: string }).command);
+        assert.deepEqual(cmds, ['*2*2*23##']);
+    });
+
     it('onData increasing', () => {
         handler.onData('*2*2*23##');
         assert.equal(handler.state, POSITION_STATE.INCREASING);
