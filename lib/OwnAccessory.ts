@@ -38,6 +38,8 @@ export interface ScenarioConfig extends BaseConfig {}
 export interface ContactConfig extends BaseConfig {}
 export interface EnergyConfig extends BaseConfig {}
 
+type LogSource = "HomeKit" | "Command" | "Gateway" | "Plugin";
+
 class OwnAccessory {
   protected log: Logging;
   protected controller: OwnClient;
@@ -72,9 +74,9 @@ class OwnAccessory {
       .setCharacteristic(this.Characteristic.SerialNumber, `MyHome-${this.id}`);
   }
 
-  protected label(message: string): string {
+  protected label(message: string, source: LogSource = "Plugin"): string {
     const normalized = message.replace(/^\[\d+\]\s*/, "");
-    return `${this.category} [${this.id}] ${normalized}`;
+    return `[${source}] ${this.category} [${this.id}] ${normalized}`;
   }
 
   updateStatus(): void {
@@ -82,15 +84,15 @@ class OwnAccessory {
   }
 
   protected logFrameInfo(message: string, packet: string): void {
-    this.log.info(`${this.label(message)} FRAME:${packet}`);
+    this.log.info(`${this.label(message, "Gateway")} FRAME:${packet}`);
   }
 
   protected logFrameDebug(message: string, packet: string): void {
-    this.log.debug(`${this.label(message)} FRAME:${packet}`);
+    this.log.debug(`${this.label(message, "Gateway")} FRAME:${packet}`);
   }
 
   protected logFrameWarn(message: string, packet: string): void {
-    this.log.warn(`${this.label(message)} FRAME:${packet}`);
+    this.log.warn(`${this.label(message, "Gateway")} FRAME:${packet}`);
   }
 
   onData(packet: string): void {
@@ -140,12 +142,13 @@ export class OwnLightAccessory extends OwnAccessory {
       .getCharacteristic(this.Characteristic.On)
       .onGet(() => this.value)
       .onSet((value: CharacteristicValue) => {
-        this.log.info(this.label(`Setting power state to ${value ? "on" : "off"}`));
+        this.log.info(this.label(`Setting power state to ${value ? "on" : "off"}`, "HomeKit"));
         this.value = value as boolean;
         if (value && this.dimmer) {
           this.scheduleDimmerOn();
         } else {
           this.cancelDimmerOn();
+          this.log.info(this.label(`Sending power ${value ? "on" : "off"} command FRAME:${this.commandForPower(value as boolean)}`, "Command"));
           this.controller.sendCommand({ command: this.commandForPower(value as boolean), log: this.log });
         }
       });
@@ -156,17 +159,19 @@ export class OwnLightAccessory extends OwnAccessory {
         .onGet(() => this.brightness)
         .onSet((value: CharacteristicValue) => {
           const requested = this.normalizeBrightness(value as number);
-          this.log.info(this.label(`Setting brightness to ${requested}`));
+          this.log.info(this.label(`Setting brightness to ${requested}`, "HomeKit"));
           this.cancelDimmerOn();
           this.brightness = requested;
           if (requested === 0) {
             this.value = false;
             this.lightbulbService.getCharacteristic(this.Characteristic.On).updateValue(false);
+            this.log.info(this.label(`Sending power off command FRAME:${this.commandForPower(false)}`, "Command"));
             this.controller.sendCommand({ command: this.commandForPower(false), log: this.log });
           } else {
             this.value = true;
             this.lightbulbService.getCharacteristic(this.Characteristic.On).updateValue(true);
             const level = this.brightnessToLevel(requested);
+            this.log.info(this.label(`Sending brightness level ${level} command FRAME:${this.commandForLevel(level)}`, "Command"));
             this.controller.sendCommand({ command: this.commandForLevel(level), log: this.log });
           }
         });
@@ -183,6 +188,7 @@ export class OwnLightAccessory extends OwnAccessory {
       this.log.info(this.label("Light status query disabled"));
       return;
     }
+    this.log.info(this.label(`Sending status query command FRAME:*#1*${this.where}##`, "Command"));
     this.controller.sendCommand({
       command: `*#1*${this.where}##`,
       log: this.log,
@@ -203,6 +209,7 @@ export class OwnLightAccessory extends OwnAccessory {
     this.cancelDimmerOn();
     this.dimmerOnTimeout = setTimeout(() => {
       this.dimmerOnTimeout = undefined;
+      this.log.info(this.label(`Sending brightness level ${this.brightnessToLevel(this.brightness)} command FRAME:${this.commandForLevel(this.brightnessToLevel(this.brightness))}`, "Command"));
       this.controller.sendCommand({ command: this.commandForLevel(this.brightnessToLevel(this.brightness)), log: this.log });
     }, 200);
   }
@@ -331,7 +338,7 @@ export class OwnBlindAccessory extends OwnAccessory {
       .getCharacteristic(this.Characteristic.TargetPosition)
       .onGet(() => this.target)
       .onSet((target: CharacteristicValue) => {
-        this.log.info(this.label(`Blind setting Target :${target}`));
+        this.log.info(this.label(`Target position changed to ${target} from current position ${this.position}`, "HomeKit"));
         this.stopMoveTracking();
         this.target = target as number;
         this.move();
@@ -340,7 +347,7 @@ export class OwnBlindAccessory extends OwnAccessory {
     this.windowCoveringService.getCharacteristic(this.Characteristic.PositionState).onGet(() => this.state);
 
     this.windowCoveringService.getCharacteristic(this.Characteristic.HoldPosition).onSet((hold: CharacteristicValue) => {
-      this.log.info(this.label(`Blind hold position :${hold}`));
+      this.log.info(this.label(`Hold position changed to ${hold} at current position ${this.position}`, "HomeKit"));
       this.stopMoveTracking();
       this.target = this.position;
       this.move();
@@ -458,7 +465,7 @@ export class OwnBlindAccessory extends OwnAccessory {
   }
 
   moveStop(): void {
-    this.log.info(this.label("Blind sending stop"));
+    this.log.info(this.label(`Sending stop command FRAME:*2*0*${this.id}##`, "Command"));
     clearTimeout(this.endStopTimeout);
     this.endStopTimeout = undefined;
     this.homeKitMovement = false;
@@ -472,7 +479,7 @@ export class OwnBlindAccessory extends OwnAccessory {
   }
 
   moveUp(): void {
-    this.log.info(this.label("Blind sending move up"));
+    this.log.info(this.label(`Sending move up command FRAME:*2*2*${this.id}##`, "Command"));
     this.homeKitMovement = true;
     this.expectedState = this.Characteristic.PositionState.INCREASING;
     this.startEndStopFallback(this.Characteristic.PositionState.INCREASING);
@@ -485,7 +492,7 @@ export class OwnBlindAccessory extends OwnAccessory {
   }
 
   moveDown(): void {
-    this.log.info(this.label("Blind sending move down"));
+    this.log.info(this.label(`Sending move down command FRAME:*2*1*${this.id}##`, "Command"));
     this.homeKitMovement = true;
     this.expectedState = this.Characteristic.PositionState.DECREASING;
     this.startEndStopFallback(this.Characteristic.PositionState.DECREASING);
@@ -501,7 +508,7 @@ export class OwnBlindAccessory extends OwnAccessory {
     // Match standard *2*<dir>*<id>## OR extended *2*1000#<dir>*<id>## (same direction codes)
     const extract = packet.match(/^\*2\*(?:1000#)?(\d+)\*\d+##$/);
     if (extract) {
-      this.log.debug("id:%s onBlind(%s)", this.id, packet);
+      this.logFrameDebug(`onBlind(${packet})`, packet);
       const direction = extract[1];
       const prevState = this.state;
       if (direction === "0") {
@@ -534,7 +541,7 @@ export class OwnBlindAccessory extends OwnAccessory {
         this.state = this.Characteristic.PositionState.INCREASING;
         this.startEndStopFallback(this.Characteristic.PositionState.INCREASING);
       } else {
-        this.log.warn("[%s] Blind unknown direction byte %s in packet %s", this.id, direction, packet);
+        this.logFrameWarn(`unknown direction byte ${direction}`, packet);
         return;
       }
       this.publishState();
@@ -554,7 +561,7 @@ export class OwnBlindAccessory extends OwnAccessory {
         this.evaluatePosition();
       }
     } else {
-      this.log.debug("[%s] Blind ignoring extended packet:%s", this.id, packet);
+      this.logFrameDebug("ignoring unsupported packet", packet);
     }
   }
 
