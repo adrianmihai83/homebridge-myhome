@@ -156,7 +156,10 @@ export class OwnLightAccessory extends OwnAccessory {
     if (this.dimmer) {
       const brightness = this.lightbulbService
         .getCharacteristic(this.Characteristic.Brightness)
-        .onGet(() => this.brightness)
+        .onGet(() => {
+          this.brightness = this.normalizeBrightness(this.brightness);
+          return this.brightness;
+        })
         .onSet((value: CharacteristicValue) => {
           const requested = this.normalizeBrightness(value as number);
           this.log.info(this.label(`Setting brightness to ${requested}`, "HomeKit"));
@@ -177,7 +180,9 @@ export class OwnLightAccessory extends OwnAccessory {
         });
 
       if (this.brightnessSteps?.length) {
+        this.brightness = this.normalizeBrightness(this.brightness);
         brightness.setProps({ validValues: this.brightnessSteps });
+        brightness.updateValue(this.brightness);
       }
     }
   }

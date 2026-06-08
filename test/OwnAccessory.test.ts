@@ -104,6 +104,24 @@ describe('OwnLightAccessory', () => {
         assert.equal(a.services['Lightbulb'].characteristics['Brightness'].value, 20);
     });
 
+    it('dimmer brightness read respects configured brightness steps', () => {
+        const p = makeMockPlatform();
+        const a = makeMockAccessory();
+        a.addService('AccessoryInformation');
+        const h = new OwnLightAccessory(p as unknown as P, a as unknown as A, {
+            id: 42,
+            name: 'dim',
+            dimmer: true,
+            brightnessSteps: [20, 40, 60, 80, 100],
+        });
+        const brightnessGetter = a.services['Lightbulb'].characteristics['Brightness'].getter!;
+
+        h.brightness = 10;
+
+        assert.equal(brightnessGetter(), 20);
+        assert.equal(h.brightness, 20);
+    });
+
     it('onData dimmer off', () => {
         const p = makeMockPlatform();
         const a = makeMockAccessory();
