@@ -262,7 +262,7 @@ export class OwnLightAccessory extends OwnAccessory {
         this.logFrameInfo(`power on (level ${level})`, packet);
         this.value = true;
         if (this.dimmer && level >= 1) {
-          this.brightness = Math.min(100, Math.max(1, level * 10));
+          this.brightness = this.normalizeBrightness(Math.min(100, Math.max(1, level * 10)));
           this.lightbulbService.getCharacteristic(this.Characteristic.Brightness).updateValue(this.brightness);
         }
       }
