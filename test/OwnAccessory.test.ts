@@ -244,6 +244,7 @@ describe('OwnLightAccessory', () => {
 
     it('checkWhere matches id', () => {
         assert.ok(handler.checkWhere('42'));
+        assert.ok(!handler.checkWhere('42#4#01'));
         assert.ok(!handler.checkWhere('99'));
     });
 
@@ -253,7 +254,7 @@ describe('OwnLightAccessory', () => {
         a.addService('AccessoryInformation');
         const h = new OwnLightAccessory(p as unknown as P, a as unknown as A, { id: 68, name: 'special', where: '68#4#01' });
         assert.ok(h.checkWhere('68#4#01'));
-        assert.ok(h.checkWhere('68'));
+        assert.ok(!h.checkWhere('68'));
         assert.ok(!h.checkWhere('99'));
         h.destroy();
     });

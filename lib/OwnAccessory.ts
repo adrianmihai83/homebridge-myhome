@@ -100,8 +100,7 @@ class OwnAccessory {
   }
 
   checkWhere(where: string): boolean {
-    const id = parseInt(where, 10);
-    return this.id === id;
+    return where === String(this.id);
   }
 
   destroy(): void {}
@@ -278,7 +277,7 @@ export class OwnLightAccessory extends OwnAccessory {
   }
 
   checkWhere(where: string): boolean {
-    return where === this.where || super.checkWhere(where);
+    return where === this.where;
   }
 
   destroy(): void {
